@@ -12,7 +12,7 @@ Example scripts to install and configure the Enterprise Console, Platform, Contr
 For additional information see: https://docs.appdynamics.com/display/PRO45/Enterprise+Console
 
 
-# Instal the Platform, Controller and Events Service
+# Install the Platform, Controller and Events Service
 
 1) Edit econsole-envvars-450a.sh with install directory, SSH Credentials, user/password, controller profile, controller name etc.
 2) Install<br/>
