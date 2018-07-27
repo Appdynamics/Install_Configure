@@ -1,0 +1,11 @@
+serverHostName=sys1
+sys.languageId=en
+disableEULA=true
+sys.installationDir=/vol1/appdynamics/4.5.0/platform
+platformAdmin.dataDir=/vol1/appdynamics/4.5.0/platform/mysql/data
+platformAdmin.port=9191
+platformAdmin.databasePort=3377
+platformAdmin.databasePassword=welcome1
+platformAdmin.databaseRootPassword=welcome1
+platformAdmin.adminPassword=welcome1
+platformAdmin.useHttps$Boolean=false
