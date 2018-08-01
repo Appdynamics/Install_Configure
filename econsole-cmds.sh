@@ -2,7 +2,7 @@
 #
 # Maintainer: David Ryder, David.Ryder@AppDynamics.com
 #
-# Install pltform, controller, events service
+# Install platform, controller, events service
 #
 # Commands:
 #   installPlatform
@@ -71,7 +71,7 @@ elif [ $cmd == "installController" ]; then
       mysqlRootPassword=$APPD_UNIVERSAL_PWD
 
     # License
-    #scp -i $APPD_SSH_PRI_KEY_FILE $APPD_LICENSE_FILE $APPD_SSH_USER_NAME@$APPD_CONTROLLER_HOST:$APPD_CONTROLLER_INSTALL_DIR/controller/.
+    scp -i $APPD_SSH_PRI_KEY_FILE $APPD_LICENSE_FILE $APPD_SSH_USER_NAME@$APPD_CONTROLLER_HOST:$APPD_CONTROLLER_INSTALL_DIR/controller/.
 
 #####################################
 # Install the Events Service
