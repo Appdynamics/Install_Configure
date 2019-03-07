@@ -143,6 +143,21 @@ _applicationAgent_Configure() {
   fi
 }
 
+_databaseAgent_Configure() {
+  CONTROLLER_INFO_XML_FILE=$1
+  if [ -e $CONTROLLER_INFO_XML_FILE ]; then
+    _validateEnvironmentVars "APPDYNAMICS_AGENT_ACCOUNT_NAME"  "APPDYNAMICS_AGENT_ACCOUNT_ACCESS_KEY" \
+                             "APPDYNAMICS_CONTROLLER_PORT" "APPDYNAMICS_CONTROLLER_SSL_ENABLED" "APPDYNAMICS_CONTROLLER_HOST_NAME"
+    _modifyConfigXml controller-host           $APPDYNAMICS_CONTROLLER_HOST_NAME      $CONTROLLER_INFO_XML_FILE
+    _modifyConfigXml controller-port           $APPDYNAMICS_CONTROLLER_PORT           $CONTROLLER_INFO_XML_FILE
+    _modifyConfigXml controller-ssl-enabled    $APPDYNAMICS_CONTROLLER_SSL_ENABLED    $CONTROLLER_INFO_XML_FILE
+    _modifyConfigXml account-name              $APPDYNAMICS_AGENT_ACCOUNT_NAME        $CONTROLLER_INFO_XML_FILE
+    _modifyConfigXml account-access-key        $APPDYNAMICS_AGENT_ACCOUNT_ACCESS_KEY  $CONTROLLER_INFO_XML_FILE
+  else
+    echo "Database Agent, Controller Info XML file does not exist: [$APPD_ANALYTICS_PROPERTIES_FILE]"
+  fi
+}
+
 _analyticsProperties_Configure() {
   APPD_ANALYTICS_PROPERTIES_FILE=$1
   if [ -e $APPD_ANALYTICS_PROPERTIES_FILE ]; then
@@ -175,5 +190,6 @@ case $CMD in
   analytics-agent)        _analyticsProperties_Configure  $@ ;;
   application-agent)      _applicationAgent_Configure     $@ ;;
   machine-agent)          _machineAgent_Configure         $@ ;;
+  database-agent)         _databaseAgent_Configure         $@ ;;
   *)                      echo "Commands unknown: [$CMD]"
 esac
