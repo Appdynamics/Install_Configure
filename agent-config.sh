@@ -114,9 +114,12 @@ _analyticsPropertiesFile_Validate() {
 
 _machineAgent_Configure() {
   CONTROLLER_INFO_XML_FILE=$1
+
   if [ -e $CONTROLLER_INFO_XML_FILE ]; then
     _validateEnvironmentVars "APPDYNAMICS_AGENT_ACCOUNT_NAME"  "APPDYNAMICS_AGENT_ACCOUNT_ACCESS_KEY" "APPDYNAMICS_SIM_ENABLED" \
                              "APPDYNAMICS_CONTROLLER_PORT" "APPDYNAMICS_CONTROLLER_SSL_ENABLED" "APPDYNAMICS_CONTROLLER_HOST_NAME"
+     # Backup existing properties file
+     _copyFileTimeStamp $CONTROLLER_INFO_XML_FILE
     _modifyConfigXml controller-host           $APPDYNAMICS_CONTROLLER_HOST_NAME      $CONTROLLER_INFO_XML_FILE
     _modifyConfigXml controller-port           $APPDYNAMICS_CONTROLLER_PORT           $CONTROLLER_INFO_XML_FILE
     _modifyConfigXml controller-ssl-enabled    $APPDYNAMICS_CONTROLLER_SSL_ENABLED    $CONTROLLER_INFO_XML_FILE
@@ -130,9 +133,12 @@ _machineAgent_Configure() {
 
 _applicationAgent_Configure() {
   CONTROLLER_INFO_XML_FILE=$1
+
   if [ -e $CONTROLLER_INFO_XML_FILE ]; then
     _validateEnvironmentVars "APPDYNAMICS_AGENT_ACCOUNT_NAME"  "APPDYNAMICS_AGENT_ACCOUNT_ACCESS_KEY" \
                              "APPDYNAMICS_CONTROLLER_PORT" "APPDYNAMICS_CONTROLLER_SSL_ENABLED" "APPDYNAMICS_CONTROLLER_HOST_NAME"
+    # Backup existing properties file
+    _copyFileTimeStamp $CONTROLLER_INFO_XML_FILE
     _modifyConfigXml controller-host           $APPDYNAMICS_CONTROLLER_HOST_NAME      $CONTROLLER_INFO_XML_FILE
     _modifyConfigXml controller-port           $APPDYNAMICS_CONTROLLER_PORT           $CONTROLLER_INFO_XML_FILE
     _modifyConfigXml controller-ssl-enabled    $APPDYNAMICS_CONTROLLER_SSL_ENABLED    $CONTROLLER_INFO_XML_FILE
@@ -145,9 +151,14 @@ _applicationAgent_Configure() {
 
 _databaseAgent_Configure() {
   CONTROLLER_INFO_XML_FILE=$1
+  # Backup existing properties file
+  _copyFileTimeStamp $CONTROLLER_INFO_XML_FILE
+
   if [ -e $CONTROLLER_INFO_XML_FILE ]; then
     _validateEnvironmentVars "APPDYNAMICS_AGENT_ACCOUNT_NAME"  "APPDYNAMICS_AGENT_ACCOUNT_ACCESS_KEY" \
                              "APPDYNAMICS_CONTROLLER_PORT" "APPDYNAMICS_CONTROLLER_SSL_ENABLED" "APPDYNAMICS_CONTROLLER_HOST_NAME"
+    # Backup existing properties file
+    _copyFileTimeStamp $CONTROLLER_INFO_XML_FILE
     _modifyConfigXml controller-host           $APPDYNAMICS_CONTROLLER_HOST_NAME      $CONTROLLER_INFO_XML_FILE
     _modifyConfigXml controller-port           $APPDYNAMICS_CONTROLLER_PORT           $CONTROLLER_INFO_XML_FILE
     _modifyConfigXml controller-ssl-enabled    $APPDYNAMICS_CONTROLLER_SSL_ENABLED    $CONTROLLER_INFO_XML_FILE
