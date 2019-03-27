@@ -85,7 +85,8 @@ _analyticsProperty_Modify() {
   NEW_VAL=$(printf '%s\n' "$2" | sed 's/[[\.*^$/]/\\&/g'   )
   #echo $V1 $NEW_VAL
   MFILE=$3
-  sed -i '' s/.*$V1.*/$V1"="$NEW_VAL/ $MFILE
+  sed -i  "s/.*$V1.*/$V1=$NEW_VAL/" "$MFILE"
+  #sed -i '' s/.*$V1.*/$V1"="$NEW_VAL/ $MFILE
 }
 # -Dappdynamics.analytics.agent.url=http://<analytics-agent-ip>:9090/v2/sinks/bt
 
