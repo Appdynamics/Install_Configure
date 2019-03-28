@@ -63,7 +63,8 @@ _modifyConfigXml () {
   MFILE=$3
   echo "Updating " $PROPERTY  "to ["$VALUE"] in "$MFILE
   # eg # <controller-host></controller-host>
-  sed -i '' "s/<$PROPERTY>.*<\/$PROPERTY>/<$PROPERTY>$VALUE<\/$PROPERTY>/g" $MFILE
+  sed -i "s/<$PROPERTY>.*<\/$PROPERTY>/<$PROPERTY>$VALUE<\/$PROPERTY>/g" $MFILE
+  #sed -i '' "s/<$PROPERTY>.*<\/$PROPERTY>/<$PROPERTY>$VALUE<\/$PROPERTY>/g" $MFILE
 }
 
 SAFE_FOR_SED="sed 's/[[\.*^$/]/\\&/g'"
