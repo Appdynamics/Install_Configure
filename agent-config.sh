@@ -5,20 +5,15 @@
 #
 # Maintainer: David Ryder, david.ryder@appdynamics.com
 #
-# Configure the AppDynamics Standalone Application Agent for:
-# 1) Application Analytics
-# 2) Server Visibility (SIM)
-# 3) Argument for APP AGENT -Dappdynamics.analytics.agent.url=http://<analytics-agent-ip>:9090/v2/sinks/bt
+# Auto configure the AppDynamics agents: Machine Agent, Analytics Agent,
+# Database and Applicaiton Agent
 #
-
 # Document References
 # https://docs.appdynamics.com/display/PRO45/Installing+Agent-Side+Components
 
 
-# Configure the following to meet the requirements of the AppDynamics Deployment
+# Configure the following environment varibales to meet the requirements of the AppDynamics Deployment
 #
-
-
 # Controller host name
 # APPDYNAMICS_CONTROLLER_HOST_NAME
 
@@ -28,7 +23,6 @@
 # SSL enabled: true | false
 # APPDYNAMICS_CONTROLLER_SSL_ENABLED
 
-# Controller PORT
 # The location of the Analytics Event Service API.
 # APPDYNAMICS_EVENTS_SERVICE_ENDPOINT
 
@@ -40,13 +34,6 @@
 
 # Replace this value with the access key of the account name configured above.
 # APPDYNAMICS_AGENT_ACCOUNT_ACCESS_KEY
-
-
-# File locations
-F1=monitors/analytics-agent/conf/analytics-agent.properties
-F2=/conf/controller-info.xml
-#APPD_ANALYTICS_PROPERTIES_FILE=$APPD_MACHINE_AGENT_INSTALL_DIR/monitors/analytics-agent/conf/analytics-agent.properties
-#APPD_APP_AGENT_CONTROLLER_FILE=$APPD_MACHINE_AGENT_INSTALL_DIR/conf/controller-info.xml
 
 _validateEnvironmentVars() {
   VAR_LIST=("$@") # rebuild using all args
