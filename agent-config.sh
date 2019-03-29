@@ -57,14 +57,21 @@ _validateEnvironmentVars() {
   [ "$ERROR" == "1" ] && { echo "Exiting"; exit 1; }
 }
 
-_modifyConfigXml () {
+_modify_XML_file() {
   PROPERTY=$1
   VALUE=$2
   MFILE=$3
   echo "Updating " $PROPERTY  "to ["$VALUE"] in "$MFILE
   # eg # <controller-host></controller-host>
-  sed -i "s/<$PROPERTY>.*<\/$PROPERTY>/<$PROPERTY>$VALUE<\/$PROPERTY>/g" $MFILE
-  #sed -i '' "s/<$PROPERTY>.*<\/$PROPERTY>/<$PROPERTY>$VALUE<\/$PROPERTY>/g" $MFILE
+  sed -i".backup" "s/<$PROPERTY>.*<\/$PROPERTY>/<$PROPERTY>$VALUE<\/$PROPERTY>/g" "$MFILE"
+}
+
+_modify_Properties_file() {
+  echo "Updating properties $1 to $2 in $3"
+  V1=$(printf '%s\n' "$1"      | sed 's/[[\.*^$/]/\\&/g'   )
+  NEW_VAL=$(printf '%s\n' "$2" | sed 's/[[\.*^$/]/\\&/g'   )
+  MFILE=$3
+  sed -i".backup"  "s/.*$V1.*/$V1=$NEW_VAL/" "$MFILE"
 }
 
 SAFE_FOR_SED="sed 's/[[\.*^$/]/\\&/g'"
@@ -80,29 +87,17 @@ _copyFileTimeStamp() {
   fi
 }
 
-_analyticsProperty_Modify() {
-  echo "Updating properties $1 to $2 in $3"
-  V1=$(printf '%s\n' "$1"      | sed 's/[[\.*^$/]/\\&/g'   )
-  NEW_VAL=$(printf '%s\n' "$2" | sed 's/[[\.*^$/]/\\&/g'   )
-  #echo $V1 $NEW_VAL
-  MFILE=$3
-  sed -i  "s/.*$V1.*/$V1=$NEW_VAL/" "$MFILE"
-  #sed -i '' s/.*$V1.*/$V1"="$NEW_VAL/ $MFILE
-}
-# -Dappdynamics.analytics.agent.url=http://<analytics-agent-ip>:9090/v2/sinks/bt
-
-
 _analyticsPropertiesFile_Modify() {
   APPD_ANALYTICS_PROPERTIES_FILE=$1
   # Backup existing properties file
   _copyFileTimeStamp $APPD_ANALYTICS_PROPERTIES_FILE
 
   # Modify Analytics Configuration
-  _analyticsProperty_Modify ad.controller.url      $CONTROLLER_URL                           $APPD_ANALYTICS_PROPERTIES_FILE
-  _analyticsProperty_Modify http.event.endpoint    $APPDYNAMICS_EVENTS_SERVICE_ENDPOINT      $APPD_ANALYTICS_PROPERTIES_FILE
-  _analyticsProperty_Modify http.event.name        $APPDYNAMICS_AGENT_ACCOUNT_NAME           $APPD_ANALYTICS_PROPERTIES_FILE
-  _analyticsProperty_Modify http.event.accountName $APPDYNAMICS_GLOBAL_ACCOUNT_NAME          $APPD_ANALYTICS_PROPERTIES_FILE
-  _analyticsProperty_Modify http.event.accessKey   $APPDYNAMICS_AGENT_ACCOUNT_ACCESS_KEY     $APPD_ANALYTICS_PROPERTIES_FILE
+  _modify_Properties_file ad.controller.url      $CONTROLLER_URL                           $APPD_ANALYTICS_PROPERTIES_FILE
+  _modify_Properties_file http.event.endpoint    $APPDYNAMICS_EVENTS_SERVICE_ENDPOINT      $APPD_ANALYTICS_PROPERTIES_FILE
+  _modify_Properties_file http.event.name        $APPDYNAMICS_AGENT_ACCOUNT_NAME           $APPD_ANALYTICS_PROPERTIES_FILE
+  _modify_Properties_file http.event.accountName $APPDYNAMICS_GLOBAL_ACCOUNT_NAME          $APPD_ANALYTICS_PROPERTIES_FILE
+  _modify_Properties_file http.event.accessKey   $APPDYNAMICS_AGENT_ACCOUNT_ACCESS_KEY     $APPD_ANALYTICS_PROPERTIES_FILE
 }
 
 _analyticsPropertiesFile_Validate() {
@@ -122,12 +117,12 @@ _machineAgent_Configure() {
                              "APPDYNAMICS_CONTROLLER_PORT" "APPDYNAMICS_CONTROLLER_SSL_ENABLED" "APPDYNAMICS_CONTROLLER_HOST_NAME"
      # Backup existing properties file
      _copyFileTimeStamp $CONTROLLER_INFO_XML_FILE
-    _modifyConfigXml controller-host           $APPDYNAMICS_CONTROLLER_HOST_NAME      $CONTROLLER_INFO_XML_FILE
-    _modifyConfigXml controller-port           $APPDYNAMICS_CONTROLLER_PORT           $CONTROLLER_INFO_XML_FILE
-    _modifyConfigXml controller-ssl-enabled    $APPDYNAMICS_CONTROLLER_SSL_ENABLED    $CONTROLLER_INFO_XML_FILE
-    _modifyConfigXml account-name              $APPDYNAMICS_AGENT_ACCOUNT_NAME        $CONTROLLER_INFO_XML_FILE
-    _modifyConfigXml account-access-key        $APPDYNAMICS_AGENT_ACCOUNT_ACCESS_KEY  $CONTROLLER_INFO_XML_FILE
-    _modifyConfigXml sim-enabled               $APPDYNAMICS_SIM_ENABLED               $CONTROLLER_INFO_XML_FILE
+    _modify_XML_file controller-host           $APPDYNAMICS_CONTROLLER_HOST_NAME      $CONTROLLER_INFO_XML_FILE
+    _modify_XML_file controller-port           $APPDYNAMICS_CONTROLLER_PORT           $CONTROLLER_INFO_XML_FILE
+    _modify_XML_file controller-ssl-enabled    $APPDYNAMICS_CONTROLLER_SSL_ENABLED    $CONTROLLER_INFO_XML_FILE
+    _modify_XML_file account-name              $APPDYNAMICS_AGENT_ACCOUNT_NAME        $CONTROLLER_INFO_XML_FILE
+    _modify_XML_file account-access-key        $APPDYNAMICS_AGENT_ACCOUNT_ACCESS_KEY  $CONTROLLER_INFO_XML_FILE
+    _modify_XML_file sim-enabled               $APPDYNAMICS_SIM_ENABLED               $CONTROLLER_INFO_XML_FILE
   else
     echo "Machine Agent, Controller Info XML file does not exist: [$APPD_ANALYTICS_PROPERTIES_FILE]"
   fi
@@ -141,11 +136,11 @@ _applicationAgent_Configure() {
                              "APPDYNAMICS_CONTROLLER_PORT" "APPDYNAMICS_CONTROLLER_SSL_ENABLED" "APPDYNAMICS_CONTROLLER_HOST_NAME"
     # Backup existing properties file
     _copyFileTimeStamp $CONTROLLER_INFO_XML_FILE
-    _modifyConfigXml controller-host           $APPDYNAMICS_CONTROLLER_HOST_NAME      $CONTROLLER_INFO_XML_FILE
-    _modifyConfigXml controller-port           $APPDYNAMICS_CONTROLLER_PORT           $CONTROLLER_INFO_XML_FILE
-    _modifyConfigXml controller-ssl-enabled    $APPDYNAMICS_CONTROLLER_SSL_ENABLED    $CONTROLLER_INFO_XML_FILE
-    _modifyConfigXml account-name              $APPDYNAMICS_AGENT_ACCOUNT_NAME        $CONTROLLER_INFO_XML_FILE
-    _modifyConfigXml account-access-key        $APPDYNAMICS_AGENT_ACCOUNT_ACCESS_KEY  $CONTROLLER_INFO_XML_FILE
+    _modify_XML_file controller-host           $APPDYNAMICS_CONTROLLER_HOST_NAME      $CONTROLLER_INFO_XML_FILE
+    _modify_XML_file controller-port           $APPDYNAMICS_CONTROLLER_PORT           $CONTROLLER_INFO_XML_FILE
+    _modify_XML_file controller-ssl-enabled    $APPDYNAMICS_CONTROLLER_SSL_ENABLED    $CONTROLLER_INFO_XML_FILE
+    _modify_XML_file account-name              $APPDYNAMICS_AGENT_ACCOUNT_NAME        $CONTROLLER_INFO_XML_FILE
+    _modify_XML_file account-access-key        $APPDYNAMICS_AGENT_ACCOUNT_ACCESS_KEY  $CONTROLLER_INFO_XML_FILE
   else
     echo "Application Agent, Controller Info XML file does not exist: [$APPD_ANALYTICS_PROPERTIES_FILE]"
   fi
@@ -161,11 +156,11 @@ _databaseAgent_Configure() {
                              "APPDYNAMICS_CONTROLLER_PORT" "APPDYNAMICS_CONTROLLER_SSL_ENABLED" "APPDYNAMICS_CONTROLLER_HOST_NAME"
     # Backup existing properties file
     _copyFileTimeStamp $CONTROLLER_INFO_XML_FILE
-    _modifyConfigXml controller-host           $APPDYNAMICS_CONTROLLER_HOST_NAME      $CONTROLLER_INFO_XML_FILE
-    _modifyConfigXml controller-port           $APPDYNAMICS_CONTROLLER_PORT           $CONTROLLER_INFO_XML_FILE
-    _modifyConfigXml controller-ssl-enabled    $APPDYNAMICS_CONTROLLER_SSL_ENABLED    $CONTROLLER_INFO_XML_FILE
-    _modifyConfigXml account-name              $APPDYNAMICS_AGENT_ACCOUNT_NAME        $CONTROLLER_INFO_XML_FILE
-    _modifyConfigXml account-access-key        $APPDYNAMICS_AGENT_ACCOUNT_ACCESS_KEY  $CONTROLLER_INFO_XML_FILE
+    _modify_XML_file controller-host           $APPDYNAMICS_CONTROLLER_HOST_NAME      $CONTROLLER_INFO_XML_FILE
+    _modify_XML_file controller-port           $APPDYNAMICS_CONTROLLER_PORT           $CONTROLLER_INFO_XML_FILE
+    _modify_XML_file controller-ssl-enabled    $APPDYNAMICS_CONTROLLER_SSL_ENABLED    $CONTROLLER_INFO_XML_FILE
+    _modify_XML_file account-name              $APPDYNAMICS_AGENT_ACCOUNT_NAME        $CONTROLLER_INFO_XML_FILE
+    _modify_XML_file account-access-key        $APPDYNAMICS_AGENT_ACCOUNT_ACCESS_KEY  $CONTROLLER_INFO_XML_FILE
   else
     echo "Database Agent, Controller Info XML file does not exist: [$APPD_ANALYTICS_PROPERTIES_FILE]"
   fi
