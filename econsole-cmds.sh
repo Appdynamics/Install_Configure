@@ -5,9 +5,13 @@
 # Install platform, controller, events service
 #
 # Commands:
-#   installPlatform
+#   login
+#   createPlatform
+#   addCredentials
 #   addLocalHost
-#   installController
+#   addRemoteHost
+#   installPrimaryController
+#   installSecondaryController
 #   installEventsService
 #   showParams
 #
@@ -17,7 +21,9 @@
 
 # Required environment variables
 declare -a \
-envVarList=("APPD_CONTROLLER_HOST" "APPD_CONTROLLER_PORT" \
+envVarList=("APPD_CONTROLLER_HOST1" "APPD_CONTROLLER_HOST2" \
+            "APPD_EVENTS_SERVICE_HOST1" "APPD_EVENTS_SERVICE_HOST2" "APPD_EVENTS_SERVICE_HOST3" \
+            "APPD_CONTROLLER_PORT" \
             "APPD_CONTROLLER_INSTALL_DIR" "APPD_SSH_PRI_KEY_FILE" \
             "APPD_SSH_CREDENTIAL_NAME" "APPD_SSH_USER_NAME" "APPD_CONTROLLER_NAME" \
             "APPD_CONTROLLER_MODE" "APPD_CONTROLLER_PROFILE" "APPD_CONTROLLER_ADMIN" \
@@ -41,41 +47,87 @@ cmd=${1:-"unknown"}
 #####################################
 # Create a Platform
 #
-if [ $cmd == "installPlatform" ]; then
+if [ $cmd == "login" ]; then
    $APPD_PLATFORM_ADMIN_CMD login --user-name  $APPD_CONTROLLER_ADMIN --password $APPD_UNIVERSAL_PWD
 
-    # Create Platform
-    $APPD_PLATFORM_ADMIN_CMD create-platform --name $APPD_CONTROLLER_NAME --installation-dir $APPD_CONTROLLER_INSTALL_DIR
+elif [ $cmd == "createPlatform" ]; then
+   # Create Platform
+   $APPD_PLATFORM_ADMIN_CMD create-platform --name $APPD_PLATFORM_NAME --installation-dir $APPD_CONTROLLER_INSTALL_DIR
+
+elif [ $cmd == "addCredentials" ]; then
+  # Private Key must be in the format: -----BEGIN RSA PRIVATE KEY-----
+  # Convert from openssh to pem using ssh-keygen -p -m PEM -f $APPD_SSH_PRI_KEY_FILE
+  #
+
+  # Check key format
+  openssl rsa -noout -text -inform PEM -in $APPD_SSH_PRI_KEY_FILE > /dev/null
+  if [ $? != 0 ] ; then
+    echo "Private key $APPD_SSH_PRI_KEY_FILE is not in the PEM format"
+    exit 1
+  else
+    echo "Private key $APPD_SSH_PRI_KEY_FILE is valid"
+  fi
 
     # Add credentials
     $APPD_PLATFORM_ADMIN_CMD add-credential \
       --credential-name $APPD_SSH_CREDENTIAL_NAME \
       --user-name $APPD_SSH_USER_NAME \
       --ssh-key-file $APPD_SSH_PRI_KEY_FILE \
-      --platform-name $APPD_CONTROLLER_NAME
+      --platform-name $APPD_PLATFORM_NAME
 
 elif [ $cmd == "addLocalHost" ]; then
+  HOST_NAME=${2:-"Host_Name_Missing"}
   # Add a local host, no credentials
-  $APPD_PLATFORM_ADMIN_CMD add-hosts --hosts $APPD_CONTROLLER_HOST \
-    --platform-name $APPD_CONTROLLER_NAME
+  $APPD_PLATFORM_ADMIN_CMD add-hosts --hosts $HOST_NAME \
+    --platform-name $APPD_PLATFORM_NAME
 
 elif [ $cmd == "addRemoteHost" ]; then
     # Add a remote host
-    $APPD_PLATFORM_ADMIN_CMD add-hosts --hosts $APPD_CONTROLLER_HOST \
+    HOST_NAME=${2:-"Host_Name_Missing"}
+    $APPD_PLATFORM_ADMIN_CMD add-hosts --hosts $HOST_NAME \
       --credential $APPD_SSH_CREDENTIAL_NAME \
-      --platform-name $APPD_CONTROLLER_NAME
+      --platform-name $APPD_PLATFORM_NAME
+
+
+#       destinationDirectory=$APPD_CONTROLLER_INSTALL_DIR \
+# platform-admin.sh submit-job --service controller --job install
+# --args controllerPrimaryHost=localhost controllerAdminUsername=<user1>
+# controllerAdminPassword=<password>
+# controllerRootUserPassword=<rootpassword>
+# mysqlRootPassword=<dbrootpassword> controllerDBPassword=<password>
+# controllerDBHost=<host> controllerProfile=<profile>
 
 #####################################
 # Install a Controller
 #
-elif [ $cmd == "installController" ]; then
+elif [ $cmd == "installPrimaryController" ]; then
     $APPD_PLATFORM_ADMIN_CMD login --user-name  $APPD_CONTROLLER_ADMIN --password $APPD_UNIVERSAL_PWD
 
     # Install controller
-    $APPD_PLATFORM_ADMIN_CMD submit-job --service controller --job install --platform-name $APPD_CONTROLLER_NAME --args \
+    $APPD_PLATFORM_ADMIN_CMD submit-job --service controller --job install \
+      --platform-name $APPD_PLATFORM_NAME \
+      --args \
+      controllerPrimaryHost=$APPD_CONTROLLER_HOST1 \
+      controllerDBHost=$APPD_CONTROLLER_HOST1 \
       controllerProfile=$APPD_CONTROLLER_PROFILE \
       controllerTenancyMode=$APPD_CONTROLLER_MODE \
-      controllerPrimaryHost=$APPD_CONTROLLER_HOST \
+      controllerAdminUsername=$APPD_CONTROLLER_ADMIN \
+      controllerAdminPassword=$APPD_UNIVERSAL_PWD \
+      controllerRootUserPassword=$APPD_UNIVERSAL_PWD \
+      mysqlRootPassword=$APPD_UNIVERSAL_PWD
+
+elif [ $cmd == "installSecondaryController" ]; then
+    $APPD_PLATFORM_ADMIN_CMD login --user-name  $APPD_CONTROLLER_ADMIN --password $APPD_UNIVERSAL_PWD
+
+    # Install controller
+    $APPD_PLATFORM_ADMIN_CMD submit-job --service controller --job install \
+      --platform-name $APPD_PLATFORM_NAME  \
+      --args \
+      controllerPrimaryHost=$APPD_CONTROLLER_HOST2 \
+      controllerSecondaryHost=$APPD_CONTROLLER_HOST2 \
+      destinationDirectory=$APPD_CONTROLLER_INSTALL_DIR \
+      controllerProfile=$APPD_CONTROLLER_PROFILE \
+      controllerTenancyMode=$APPD_CONTROLLER_MODE \
       controllerAdminUsername=$APPD_CONTROLLER_ADMIN \
       controllerAdminPassword=$APPD_UNIVERSAL_PWD \
       controllerRootUserPassword=$APPD_UNIVERSAL_PWD \
@@ -85,20 +137,37 @@ elif [ $cmd == "licenseLocal" ]; then
   cp $APPD_LICENSE_FILE $APPD_CONTROLLER_INSTALL_DIR/controller/.
 
 elif [ $cmd == "licenseRemote" ]; then
-  scp -i $APPD_SSH_PRI_KEY_FILE $APPD_LICENSE_FILE $APPD_SSH_USER_NAME@$APPD_CONTROLLER_HOST:$APPD_CONTROLLER_INSTALL_DIR/controller/.
+  scp -i $APPD_SSH_PRI_KEY_FILE $APPD_LICENSE_FILE $APPD_SSH_USER_NAME@$APPD_CONTROLLER_HOST1:$APPD_CONTROLLER_INSTALL_DIR/controller/.
+  scp -i $APPD_SSH_PRI_KEY_FILE $APPD_LICENSE_FILE $APPD_SSH_USER_NAME@$APPD_CONTROLLER_HOST2:$APPD_CONTROLLER_INSTALL_DIR/controller/.
 
 #####################################
 # Install the Events Service
 #
-elif [ $cmd == "installEventsService" ]; then
-  # Install Events Service
+elif [ $cmd == "installSingleEventsService" ]; then
+  # Install Single Events Service
   $APPD_PLATFORM_ADMIN_CMD install-events-service \
     --profile $APPD_EVENTSSERVICE_PROFILE \
-    --hosts $APPD_CONTROLLER_HOST \
+    --hosts $APPD_EVENTS_SERVICE_HOST1 \
     --data-dir $APPD_CONTROLLER_INSTALL_DIR \
-    --platform-name $APPD_CONTROLLER_NAME
+    --platform-name $APPD_PLATFORM_NAME
 
 
+#     --ssh-key-file      $APPD_SSH_PRI_KEY_FILE \
+#       --remote-user       $APPD_SSH_USER_NAME \
+
+#####################################
+# Install the Events Service
+#
+elif [ $cmd == "installMultiEventsService" ]; then
+  # Install Multi Events Service
+  $APPD_PLATFORM_ADMIN_CMD install-events-service \
+    --profile           $APPD_EVENTSSERVICE_PROFILE \
+    --hosts             $APPD_EVENTS_SERVICE_HOST1 $APPD_EVENTS_SERVICE_HOST2 $APPD_EVENTS_SERVICE_HOST3 \
+    --data-dir          $APPD_CONTROLLER_INSTALL_DIR \
+    --platform-name     $APPD_PLATFORM_NAME
+
+
+elif [ $cmd == "enableEventsService" ]; then
     SAFE_FOR_SED="sed 's/[[\.*^$/]/\\&/g'"
 
     _modifyProperties() {
@@ -110,13 +179,12 @@ elif [ $cmd == "installEventsService" ]; then
       sed -i -- 's/.*$V1.*/$V1"="$NEW_VAL/' $MFILE
     }
 
-
-MFILE=$APPD_CONTROLLER_INSTALL_DIR/events-service/processor/conf/events-service-api-store.properties
-_modifyProperties ad.bizoutcome.enabled      true       $MFILE
-sed -i -- 's/ad\.bizoutcome\.enabled=false/ad\.bizoutcome\.enabled=true/g' $MFILE
-grep ad.bizoutcome.enabled $MFILE
-# events-service/processor/conf/events-service-api-store.properties
-# ad.bizoutcome.enabled=true
+    MFILE=$APPD_CONTROLLER_INSTALL_DIR/events-service/processor/conf/events-service-api-store.properties
+    _modifyProperties ad.bizoutcome.enabled      true       $MFILE
+    sed -i -- 's/ad\.bizoutcome\.enabled=false/ad\.bizoutcome\.enabled=true/g' $MFILE
+    grep ad.bizoutcome.enabled $MFILE
+    # events-service/processor/conf/events-service-api-store.properties
+    # ad.bizoutcome.enabled=true
 
 
 #####################################
@@ -126,18 +194,19 @@ elif [ $cmd == "deletePlatform" ]; then
       # Install controller
       $APPD_PLATFORM_ADMIN_CMD login --user-name  $APPD_CONTROLLER_ADMIN --password $APPD_UNIVERSAL_PWD
       $APPD_PLATFORM_ADMIN_CMD list-platforms
-      $APPD_PLATFORM_ADMIN_CMD remove-hosts --hosts $APPD_CONTROLLER_HOST --platform-name $APPD_CONTROLLER_NAME
-      $APPD_PLATFORM_ADMIN_CMD remove-dead-hosts --hosts $APPD_CONTROLLER_HOST --platform-name $APPD_CONTROLLER_NAME
+      $APPD_PLATFORM_ADMIN_CMD remove-hosts --hosts $APPD_CONTROLLER_HOST1 --platform-name $APPD_PLATFORM_NAME
+      $APPD_PLATFORM_ADMIN_CMD remove-dead-hosts --hosts $APPD_CONTROLLER_HOST1 --platform-name $APPD_PLATFORM_NAME
       $APPD_PLATFORM_ADMIN_CMD list-credentials --platform-name $APPD_CONTROLLER_NAME
-      $APPD_PLATFORM_ADMIN_CMD remove-credential --credential-name $APPD_SSH_CREDENTIAL_NAME --platform-name $APPD_CONTROLLER_NAME
-      $APPD_PLATFORM_ADMIN_CMD delete-platform --name $APPD_CONTROLLER_NAME
+      $APPD_PLATFORM_ADMIN_CMD remove-credential --credential-name $APPD_SSH_CREDENTIAL_NAME --platform-name $APPD_PLATFORM_NAME
+      $APPD_PLATFORM_ADMIN_CMD delete-platform --name $APPD_PLATFORM_NAME
 
 #####################################
 # Get the controller status
 #
 elif [ $cmd == "controllerStatus" ]; then
     # Controller status
-    curl $APPD_CONTROLLER_HOST:$APPD_CONTROLLER_PORT/controller/rest/serverstatus
+    curl $APPD_CONTROLLER_HOST1:$APPD_CONTROLLER_PORT/controller/rest/serverstatus
+    curl $APPD_CONTROLLER_HOST2:$APPD_CONTROLLER_PORT/controller/rest/serverstatus
 
 elif [ $cmd == "showParams" ]; then
   $APPD_PLATFORM_ADMIN_CMD list-job-parameters --job install --service controller
@@ -147,7 +216,7 @@ elif [ $cmd == "createResponseFile" ]; then
   RFILE=${2:-"/tmp/appd-econsole-response.varfile"}
   echo "Creating "$RFILE
   echo "# Automatically generated "                                 > $RFILE
-  echo "serverHostName=$APPD_CONTROLLER_HOST"                       >> $RFILE
+  echo "serverHostName=$APPD_CONTROLLER_HOST1"                       >> $RFILE
   echo "sys.languageId=en"                                          >> $RFILE
   echo "disableEULA=true"                                           >> $RFILE
   echo "sys.installationDir=$APPD_CONTROLLER_INSTALL_DIR/platform"  >> $RFILE
