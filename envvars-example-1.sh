@@ -1,8 +1,9 @@
 #!/bin/bash
 #
-# Environment vars for Platform Admin and Controller
-#
+# Environment variables for econsole-cmds.sh for installation of
+# Controller and Events Service
 # Ver 4.5.7.18512
+#
 export APPD_CONTROLLER_HOST1=controller1
 export APPD_CONTROLLER_HOST2=controller2
 export APPD_EVENTS_SERVICE_HOST1=events1
