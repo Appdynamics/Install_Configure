@@ -5,6 +5,7 @@
 # Install platform, controller, events service
 #
 # Commands:
+#   accountInfo
 #   login
 #   createPlatform
 #   addCredentials
