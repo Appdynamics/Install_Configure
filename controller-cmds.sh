@@ -17,30 +17,27 @@ appDescription=${3:-"Created `date +'%m%d%y-%H%M'`"}
 showHelp="NO"
 ERROR=0
 
-# Parameters
-[ -z "$APPD_APPLICATION_NAME" ]  && { echo "<applicationName> parameter not set"; ERROR=1; }
-[ "$ERROR" == 0 ] && { showHelp="YES";  }
-
-# Required environment variables. Authentication and Access
-declare -a envVarList=("APPD_USER_NAME" "APPD_ACCOUNT" "APPD_PWD" "APPD_CONTROLLER_HOST" "APPD_CONTROLLER_PORT")
-for i in "${envVarList[@]}"; do
-   [ -z ${!i} ] && { echo "Environment variable not set: $i"; ERROR=1; }
-done
-[ "$ERROR" == 0 ] && { showHelp="YES";  }
-
-APPD_FULL_USER=$APPD_USER_NAME@$APPD_ACCOUNT:$APPD_PWD
-B64AUTH=`echo $APPD_FULL_USER | base64`
-
 # Temp files
 CURL_SESSION_FILE=/tmp/appd-curl-session.dat
 
 #VERBOSE="--verbose"
 #VERBOSE="-v"
 
+_validateEnvironmentVars() {
+  VAR_LIST=("$@") # rebuild using all args
+  #echo $VAR_LIST
+  for i in "${VAR_LIST[@]}"; do
+     [ -z ${!i} ] && { echo "Environment variable not set: $i"; ERROR="1"; }
+  done
+  [ "$ERROR" == "1" ] && { echo "Exiting"; exit 1; }
+}
 
 _controllerAutheticate() {
   # Authentication to Controller
-  # Requires: APPD_USER, APPD_PWD, APPD_ACCOUNT
+  _validateEnvironmentVars "APPD_USER_NAME" "APPD_ACCOUNT" "APPD_PWD" "APPD_CONTROLLER_HOST" "APPD_CONTROLLER_PORT"
+
+  APPD_FULL_USER=$APPD_USER_NAME@$APPD_ACCOUNT:$APPD_PWD
+  B64AUTH=`echo $APPD_FULL_USER | base64`
   rm -f $CURL_SESSION_FILE
   curl $VERBOSE -s -c $CURL_SESSION_FILE \
        --user "$APPD_FULL_USER" \
@@ -95,8 +92,45 @@ _getValue() { echo $1 | base64 --decode | jq -r $2; }
 # Test authentication to Controller
 #
 if [ $cmd == "authenticate" ]; then
+
   _controllerAutheticate
   cat $CURL_SESSION_FILE
+
+
+  #####################################
+  # Create an AppDynamce APM applicaiton in the controller
+  #
+ elif [ $cmd == "accountInfo" ]; then
+   _controllerAutheticate
+   _http "GET" "http" "/controller/restui/user/account" ""
+
+   # Setup envvars
+   APPDYNAMICS_CONTROLLER_HOST_NAME=$APPD_CONTROLLER_HOST
+   APPDYNAMICS_CONTROLLER_PORT=$APPD_CONTROLLER_PORT
+   APPDYNAMICS_AGENT_ACCOUNT_ACCESS_KEY=`echo $HTTP_RESULT | jq -r .account.accessKey`
+   APPDYNAMICS_AGENT_ACCOUNT_NAME=`echo $HTTP_RESULT | jq -r .account.name`
+   APPDYNAMICS_GLOBAL_ACCOUNT_NAME=`echo $HTTP_RESULT | jq -r .account.globalAccountName`
+
+   # Export envvars for agent configuration
+
+   echo "# Agent configuration"
+   echo "export APPDYNAMICS_CONTROLLER_HOST_NAME=$APPDYNAMICS_CONTROLLER_HOST_NAME"
+   echo "export APPDYNAMICS_CONTROLLER_PORT=$APPDYNAMICS_CONTROLLER_PORT"
+   echo "export APPDYNAMICS_CONTROLLER_SSL_ENABLED=false"
+   echo "export APPDYNAMICS_AGENT_ACCOUNT_ACCESS_KEY=$APPDYNAMICS_AGENT_ACCOUNT_ACCESS_KEY"
+   echo "export APPDYNAMICS_AGENT_ACCOUNT_NAME=$APPDYNAMICS_AGENT_ACCOUNT_NAME"
+   echo "export APPDYNAMICS_GLOBAL_ACCOUNT_NAME=$APPDYNAMICS_GLOBAL_ACCOUNT_NAME"
+   echo "export APPDYNAMICS_ANALYTICS_AGENT_URL=http://localhost:9090/v2/sinks/bt"
+   echo "export APPDYNAMICS_EVENTS_SERVICE_ENDPOINT=http://<----URL---->:8090"
+   echo "export APPDYNAMICS_SIM_ENABLED=true"
+
+   echo "# App, Tier, Node  Names"
+   echo "export APPDYNAMICS_AGENT_APPLICATION_NAME=APP_TEST_1"
+   echo "export APPDYNAMICS_AGENT_TIER_NAME=APP_TIER_T1"
+   echo "export APPDYNAMICS_AGENT_NODE_NAME=APP_NODE_N1"
+
+   # $HTTP_RESULT | jq
+
 
 #####################################
 # Create an AppDynamce APM applicaiton in the controller
@@ -127,16 +161,7 @@ elif [ $cmd == "createApp" ]; then
   #     -X POST http://$APPD_CONTROLLER_HOST:$APPD_CONTROLLER_PORT$SERVICE
   _http2 "POST" "http" "/controller/restui/allApplications/createApplication?applicationType=APM" "$PARAMS"
 
- #####################################
- # Create an AppDynamce APM applicaiton in the controller
- #
-elif [ $cmd == "accountInfo" ]; then
-  _controllerAutheticate
-  _http "GET" "http" "/controller/restui/user/account" ""
-  echo $HTTP_RESULT | jq -r .account.accessKey
-  echo $HTTP_RESULT | jq -r .account.name
-  echo $HTTP_RESULT | jq -r .account.globalAccountName
-  # $HTTP_RESULT | jq
+
 
 #####################################
 # Create an AppDynamce APM applicaiton in the controller
