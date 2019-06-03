@@ -13,7 +13,7 @@ sudo apt-get -y install libaio1 numactl net-tools tzdata chrony
 # Response file
 RESPONSE_FILE=`pwd`"/response-file-$APPD_VERSION-$APPD_RELEASE_NUMBER.txt"
 
-echo "serverHostName=$APPD_CONTROLLER_HOST"                                    > $RESPONSE_FILE
+echo "serverHostName=$APPD_ECONSOLE_HOST"                                    > $RESPONSE_FILE
 echo "sys.languageId=en"                                                      >> $RESPONSE_FILE
 echo "disableEULA=true"                                                       >> $RESPONSE_FILE
 echo "sys.installationDir=$APPD_BASE_DIR/platform"                            >> $RESPONSE_FILE

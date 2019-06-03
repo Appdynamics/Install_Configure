@@ -14,6 +14,10 @@ export APPD_BASE_DIR=/home/appduser/appdynamics
 export APPD_CONTROLLER_INSTALL_DIR=$APPD_BASE_DIR/$APPD_PLATFORM_NAME
 export APPD_PLATFORM_ADMIN_CMD=$APPD_BASE_DIR/platform/platform-admin/bin/platform-admin.sh
 
+
+# Econsole Host Name
+APPD_ECONSOLE_HOST=econsole.test1.com
+
 # Hostname of controller for authentication (same host as APPD_CONTROLLER_HOST1)
 export APPD_CONTROLLER_HOST=controller1.test1.com
 
