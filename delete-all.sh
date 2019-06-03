@@ -15,7 +15,7 @@ $APPD_PLATFORM_ADMIN_CMD submit-job --service controller --job stop --platform-n
 
 # Uninstall
 $APPD_PLATFORM_ADMIN_CMD submit-job --service events-service --job uninstall --platform-name $APPD_PLATFORM_NAME
-$APPD_PLATFORM_ADMIN_CMD submit-job --service controller --job uninstall --platform-name $APPD_PLATFORM_NAME
+$APPD_PLATFORM_ADMIN_CMD submit-job --service controller --job remove --platform-name $APPD_PLATFORM_NAME
 
 # Remove hosts
 $APPD_PLATFORM_ADMIN_CMD remove-hosts --hosts $APPD_CONTROLLER_HOST1 --platform-name $APPD_PLATFORM_NAME
