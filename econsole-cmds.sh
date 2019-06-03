@@ -246,7 +246,7 @@ elif [ $cmd == "accountInfo" ]; then
   echo "export APPDYNAMICS_AGENT_ACCOUNT_NAME=$APPDYNAMICS_AGENT_ACCOUNT_NAME"
   echo "export APPDYNAMICS_GLOBAL_ACCOUNT_NAME=$APPDYNAMICS_GLOBAL_ACCOUNT_NAME"
   echo "export APPDYNAMICS_ANALYTICS_AGENT_URL=http://localhost:9090/v2/sinks/bt"
-  echo "export APPDYNAMICS_EVENTS_SERVICE_ENDPOINT=http://<----URL---->:8090"
+  echo "export APPDYNAMICS_EVENTS_SERVICE_ENDPOINT=http://----URL----:9080"
   echo "export APPDYNAMICS_SIM_ENABLED=true"
 
   echo "# App, Tier, Node  Names"
