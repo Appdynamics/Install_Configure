@@ -21,16 +21,13 @@
 #    econsole-envvars.sh
 #
 
-
-
+# Command
 cmd=${1:-"unknown"}
 
 # Temp files
 CURL_SESSION_FILE=/tmp/appd-curl-session.dat
-#
-# APPD_CURRENT_PLATFORM = APPD_CONTROLLER_NAME
-#
-#APPD_PLATFORM_ADMIN_CMD=$APPD_CONTROLLER_INSTALL_DIR/platform/platform-admin/bin/platform-admin.sh
+
+#VERBOSE="-v"
 
 _validateEnvironmentVars() {
   echo "Validating environment variables for $1"
@@ -61,6 +58,12 @@ _controllerAutheticate() {
   XCSRFTOKEN=`grep X-CSRF-TOKEN $CURL_SESSION_FILE | sed 's/^.*X-CSRF-TOKEN\s*//' | $SED_TRIM_SPACES`
 }
 
+_login() {
+  _validateEnvironmentVars "Controller Login" \
+              "APPD_PLATFORM_ADMIN_CMD" "APPD_CONTROLLER_ADMIN" "APPD_UNIVERSAL_PWD"
+  $APPD_PLATFORM_ADMIN_CMD login --user-name  $APPD_CONTROLLER_ADMIN --password $APPD_UNIVERSAL_PWD
+}
+
 _http() {
   METHOD=$1
   PROTOCOL=$2
@@ -79,8 +82,6 @@ _http() {
        -X $METHOD $PROTOCOL://$APPD_CONTROLLER_HOST:$APPD_CONTROLLER_PORT$SERVICE`
 }
 
-
-
 # Required environment variables for install
 _validateEnvironmentVars "Controller Install" \
             "APPD_CONTROLLER_HOST1" "APPD_CONTROLLER_HOST2" \
@@ -96,24 +97,28 @@ _validateEnvironmentVars "Controller Install" \
 # Create a Platform
 #
 if [ $cmd == "login" ]; then
-   $APPD_PLATFORM_ADMIN_CMD login --user-name  $APPD_CONTROLLER_ADMIN --password $APPD_UNIVERSAL_PWD
+   _login
 
 elif [ $cmd == "createPlatform" ]; then
+  _validateEnvironmentVars "Create Platform" \
+              "APPD_PLATFORM_ADMIN_CMD" "APPD_PLATFORM_NAME" "APPD_CONTROLLER_INSTALL_DIR"
    # Create Platform
    $APPD_PLATFORM_ADMIN_CMD create-platform --name $APPD_PLATFORM_NAME --installation-dir $APPD_CONTROLLER_INSTALL_DIR
 
 elif [ $cmd == "addCredentials" ]; then
+  _validateEnvironmentVars "Create Platform" \
+              "APPD_PLATFORM_ADMIN_CMD" "APPD_SSH_PRI_KEY_FILE" "APPD_SSH_CREDENTIAL_NAME" "APPD_SSH_USER_NAME" \
+              "APPD_PLATFORM_NAME"
   # Private Key must be in the format: -----BEGIN RSA PRIVATE KEY-----
   # Convert from openssh to pem using ssh-keygen -p -m PEM -f $APPD_SSH_PRI_KEY_FILE
-  #
 
   # Check key format
   openssl rsa -noout -text -inform PEM -in $APPD_SSH_PRI_KEY_FILE > /dev/null
   if [ $? != 0 ] ; then
-    echo "Private key $APPD_SSH_PRI_KEY_FILE is not in the PEM format"
+    echo "Private key $APPD_SSH_PRI_KEY_FILE is not PEM RSA: Must be -----BEGIN RSA PRIVATE KEY-----"
     exit 1
   else
-    echo "Private key $APPD_SSH_PRI_KEY_FILE is valid"
+    echo "Private key $APPD_SSH_PRI_KEY_FILE is valid PEM RSA"
   fi
 
   # Add credentials
@@ -140,7 +145,7 @@ elif [ $cmd == "addRemoteHost" ]; then
 # Install a Controller
 #
 elif [ $cmd == "installPrimaryController" ]; then
-    $APPD_PLATFORM_ADMIN_CMD login --user-name  $APPD_CONTROLLER_ADMIN --password $APPD_UNIVERSAL_PWD
+    _login
 
     # Install controller
     $APPD_PLATFORM_ADMIN_CMD submit-job --service controller --job install \
@@ -156,7 +161,7 @@ elif [ $cmd == "installPrimaryController" ]; then
       mysqlRootPassword=$APPD_UNIVERSAL_PWD
 
 elif [ $cmd == "installSecondaryController" ]; then
-    $APPD_PLATFORM_ADMIN_CMD login --user-name  $APPD_CONTROLLER_ADMIN --password $APPD_UNIVERSAL_PWD
+    _login
 
     # Install controller
     $APPD_PLATFORM_ADMIN_CMD submit-job --service controller --job install \
@@ -226,6 +231,7 @@ elif [ $cmd == "enableEventsService" ]; then
     # ad.bizoutcome.enabled=true
 
 elif [ $cmd == "accountInfo" ]; then
+  # Requires jq (apt-get install jq | yum install jq)
   _controllerAutheticate
   _http "GET" "http" "/controller/restui/user/account" ""
 
@@ -276,9 +282,20 @@ elif [ $cmd == "controllerStatus" ]; then
     curl $APPD_CONTROLLER_HOST1:$APPD_CONTROLLER_PORT/controller/rest/serverstatus
     curl $APPD_CONTROLLER_HOST2:$APPD_CONTROLLER_PORT/controller/rest/serverstatus
 
-elif [ $cmd == "showParams" ]; then
-  $APPD_PLATFORM_ADMIN_CMD list-job-parameters --job install --service controller
-  $APPD_PLATFORM_ADMIN_CMD list-job-parameters --job install --service events-service
+elif [ $cmd == "eventsServiceStatus" ]; then
+  curl $APPD_EVENTS_SERVICE_HOST1:9081/healthcheck?pretty=true
+  curl $APPD_EVENTS_SERVICE_HOST2:9081/healthcheck?pretty=true
+  curl $APPD_EVENTS_SERVICE_HOST3:9081/healthcheck?pretty=true
+
+elif [ $cmd == "listParams" ]; then
+  _login
+  $APPD_PLATFORM_ADMIN_CMD list-job-parameters --job install --service controller --platform-name $APPD_PLATFORM_NAME
+  $APPD_PLATFORM_ADMIN_CMD list-job-parameters --job install --service events-service --platform-name $APPD_PLATFORM_NAME
+
+elif [ $cmd == "listJobs" ]; then
+  _login
+  $APPD_PLATFORM_ADMIN_CMD list-jobs --platform-name $APPD_PLATFORM_NAME --service controller
+  $APPD_PLATFORM_ADMIN_CMD list-jobs --platform-name $APPD_PLATFORM_NAME --service events-service
 
 elif [ $cmd == "createResponseFile" ]; then
   RFILE=${2:-"/tmp/appd-econsole-response.varfile"}
@@ -293,7 +310,7 @@ elif [ $cmd == "createResponseFile" ]; then
   echo "platformAdmin.databasePassword=$APPD_UNIVERSAL_PWD"         >> $RFILE
   echo "platformAdmin.databaseRootPassword=$APPD_UNIVERSAL_PWD"     >> $RFILE
   echo "platformAdmin.adminPassword=$APPD_UNIVERSAL_PWD"            >> $RFILE
-  echo "platformAdmin.useHttps$Boolean=false"                       >> $RFILE
+  echo 'platformAdmin.useHttps$Boolean''=false'                     >> $RFILE
 
 else
   echo "Command unknown: "$cmd
