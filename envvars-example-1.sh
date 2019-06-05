@@ -40,6 +40,7 @@ export APPD_SSH_CREDENTIAL_NAME=appduser-02052019
 export APPD_SSH_USER_NAME=appduser
 
 # Controller authentication
+export APP_ACCOUNT=customer1
 export APPD_CONTROLLER_ADMIN=admin
 export APPD_UNIVERSAL_PWD=changepwd1
 
