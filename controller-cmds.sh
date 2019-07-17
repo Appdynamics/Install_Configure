@@ -2,14 +2,17 @@
 #
 # Maintainer: David Ryder, David.Ryder@AppDynamics.com
 #
-# Create an AppDynamics APM Application in the Controller
+# AppDynamics Controller Commands
 #
 # Commands:
 #   authenticate
-#   createApp <app name> [<app description>]
+#   accountInfo
+#   getApps
+#   getAppNodes
+#   appNodeMonitoring
 #
 # Requires:
-#    controller-envars.sh
+#    jq  - https://stedolan.github.io/jq/ - sudo apt-get install jq
 #
 cmd=${1:-"unknown"}
 APPD_APPLICATION_NAME=${2:-""}
@@ -33,19 +36,26 @@ _validateEnvironmentVars() {
 }
 
 _controllerAutheticate() {
-  # Authentication to Controller
-  _validateEnvironmentVars "APPD_USER_NAME" "APPD_ACCOUNT" "APPD_PWD" "APPD_CONTROLLER_HOST" "APPD_CONTROLLER_PORT"
+  # Authentication to Controller using basic authentication
+  _validateEnvironmentVars "APPD_CONTROLLER_ADMIN" "APPDYNAMICS_AGENT_ACCOUNT_NAME" "APPD_UNIVERSAL_PWD" "APPDYNAMICS_CONTROLLER_HOST_NAME" "APPDYNAMICS_CONTROLLER_PORT"
 
-  APPD_FULL_USER=$APPD_USER_NAME@$APPD_ACCOUNT:$APPD_PWD
+  APPD_FULL_USER=$APPD_CONTROLLER_ADMIN@$APPDYNAMICS_AGENT_ACCOUNT_NAME:$APPD_UNIVERSAL_PWD
   B64AUTH=`echo $APPD_FULL_USER | base64`
   rm -f $CURL_SESSION_FILE
   curl $VERBOSE -s -c $CURL_SESSION_FILE \
        --user "$APPD_FULL_USER" \
-       -X GET http://$APPD_CONTROLLER_HOST:$APPD_CONTROLLER_PORT/controller/auth?action=login
+       -X GET http://$APPDYNAMICS_CONTROLLER_HOST_NAME:$APPDYNAMICS_CONTROLLER_PORT/controller/auth?action=login
 
   # Get X-CSRF-TOKEN
   SED_TRIM_SPACES='sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//''
   XCSRFTOKEN=`grep X-CSRF-TOKEN $CURL_SESSION_FILE | sed 's/^.*X-CSRF-TOKEN\s*//' | $SED_TRIM_SPACES`
+  #echo "XRCF [$XCSRFTOKEN]"
+  if [ "$XCSRFTOKEN" == "" ]; then
+    echo "Failed to authenticate to controller: $APPDYNAMICS_CONTROLLER_HOST_NAME:$APPDYNAMICS_CONTROLLER_PORT"
+    exit 1
+  else
+    echo "Authentication sucessful: $APPDYNAMICS_CONTROLLER_HOST_NAME:$APPDYNAMICS_CONTROLLER_PORT"
+  fi
 }
 
 _http() {
@@ -54,16 +64,16 @@ _http() {
   SERVICE=$3
   POST_DATA=$4
   HTTP_RESULT=`curl $VERBOSE -s -b $CURL_SESSION_FILE \
-       --header "Origin: http://$APPD_CONTROLLER_HOST:$APPD_CONTROLLER_PORT" \
+       --header "Origin: http://$APPDYNAMICS_CONTROLLER_HOST_NAME:$APPDYNAMICS_CONTROLLER_PORT" \
        --header "Accept-Encoding: text" \
        --header "Accept-Language: en-US,en;q=0.9" \
        --header "X-CSRF-TOKEN: ${XCSRFTOKEN}" \
        --header "Content-Type: application/vnd.appd.cntrl+json;v=1" \
        --header "Accept: application/json, text/plain, */*" \
-       --header "Referer: http://$APPD_CONTROLLER_HOST:$APPD_CONTROLLER_PORT/controller/" \
+       --header "Referer: http://$APPDYNAMICS_CONTROLLER_HOST_NAME:$APPDYNAMICS_CONTROLLER_PORT/controller/" \
        --data-binary "${POST_DATA}" \
        --header "Connection: keep-alive" \
-       -X $METHOD $PROTOCOL://$APPD_CONTROLLER_HOST:$APPD_CONTROLLER_PORT$SERVICE`
+       -X $METHOD $PROTOCOL://$APPDYNAMICS_CONTROLLER_HOST_NAME:$APPDYNAMICS_CONTROLLER_PORT$SERVICE`
 }
 
 _http2() {
@@ -72,30 +82,64 @@ _http2() {
   SERVICE=$3
   POST_DATA=$4
   HTTP_RESULT=`curl $VERBOSE -s -b $CURL_SESSION_FILE \
-       --header "Origin: http://$APPD_CONTROLLER_HOST:$APPD_CONTROLLER_PORT" \
+       --header "Origin: http://$APPDYNAMICS_CONTROLLER_HOST_NAME:$APPDYNAMICS_CONTROLLER_PORT" \
        --header "Accept-Encoding: text" \
        --header "Accept-Language: en-US,en;q=0.9" \
        --header "X-CSRF-TOKEN: ${XCSRFTOKEN}" \
        --header "Content-Type: application/json;charset=utf-8" \
        --header "Accept: application/json, text/plain, */*" \
-       --header "Referer: http://$APPD_CONTROLLER_HOST:$APPD_CONTROLLER_PORT/controller/" \
+       --header "Referer: http://$APPDYNAMICS_CONTROLLER_HOST_NAME:$APPDYNAMICS_CONTROLLER_PORT/controller/" \
        --data-binary "${POST_DATA}" \
        --header "Connection: keep-alive" \
        --compressed \
-       -X $METHOD $PROTOCOL://$APPD_CONTROLLER_HOST:$APPD_CONTROLLER_PORT$SERVICE`
+       -X $METHOD $PROTOCOL://$APPDYNAMICS_CONTROLLER_HOST_NAME:$APPDYNAMICS_CONTROLLER_PORT$SERVICE`
 }
 
 _getValue() { echo $1 | base64 --decode | jq -r $2; }
 
+_controllerGetApplicationId() {
+  _APP_NAME=${1:-"UNKNOWN"}
+  _http "GET" "http" "/controller/rest/applications?output=JSON" ""
+  APP_ID=`echo "${HTTP_RESULT}" | jq --arg APP_NAME "$_APP_NAME" \
+          -r  '.[] | select(.name == $APP_NAME) \
+                | .id '`
+  #echo "Found App: $APP_NAME ID: $APP_ID"
+  echo $APP_ID
+}
+
+_controllerGetAppNodes() {
+  APP_NAME=${1:-"Error Application Name Missing"}
+  TIER_NAME=${2:-"Error Tier Name Missing"}
+  NODE_NAME=${3:-"Error Node Name Missing"}
+  RESULT=""
+  APP_ID=$(_controllerGetApplicationId ${APP_NAME})
+  if [ "$APP_ID" != "" ]; then
+    _http "GET" "http" "/controller/rest/applications/$APP_ID/nodes?output=JSON" ""
+    RESULT=`echo "${HTTP_RESULT}" | jq --arg NODE_NAME "$NODE_NAME" --arg TIER_NAME "$TIER_NAME"  \
+            -r  '[.[] | select((.tierName | test($TIER_NAME)) and (.name | test($NODE_NAME)))]' `
+  else
+    echo "Error node not found: [$APP_NAME] [$TIER_NAME] [$NODE_NAME] [$APP_ID]"
+    exit 1
+  fi
+  echo $RESULT
+}
+
+_controllerDisableNodeMonitoring() {
+  _NODE_ID=${1:-"NONE_NONE"}
+  _http "POST" "http" "/controller/restui/agent/setting/disableAppServerAgentForNode/$_NODE_ID?disableMonitoring=true" ""
+}
+
+_controllerEnableNodeMonitoring() {
+  _NODE_ID=${1:-"NONE_NONE"}
+  _http "POST" "http" "/controller/restui/agent/setting/enableAppServerAgentForNode/$_NODE_ID" ""
+}
 
 #####################################
 # Test authentication to Controller
 #
 if [ $cmd == "authenticate" ]; then
-
   _controllerAutheticate
   cat $CURL_SESSION_FILE
-
 
   #####################################
   # Create an AppDynamce APM applicaiton in the controller
@@ -105,8 +149,8 @@ if [ $cmd == "authenticate" ]; then
    _http "GET" "http" "/controller/restui/user/account" ""
 
    # Setup envvars
-   APPDYNAMICS_CONTROLLER_HOST_NAME=$APPD_CONTROLLER_HOST
-   APPDYNAMICS_CONTROLLER_PORT=$APPD_CONTROLLER_PORT
+   APPDYNAMICS_CONTROLLER_HOST_NAME=$APPDYNAMICS_CONTROLLER_HOST_NAME
+   APPDYNAMICS_CONTROLLER_PORT=$APPDYNAMICS_CONTROLLER_PORT
    APPDYNAMICS_AGENT_ACCOUNT_ACCESS_KEY=`echo $HTTP_RESULT | jq -r .account.accessKey`
    APPDYNAMICS_AGENT_ACCOUNT_NAME=`echo $HTTP_RESULT | jq -r .account.name`
    APPDYNAMICS_GLOBAL_ACCOUNT_NAME=`echo $HTTP_RESULT | jq -r .account.globalAccountName`
@@ -148,17 +192,17 @@ elif [ $cmd == "createApp" ]; then
   SERVICE='/controller/restui/allApplications/createApplication?applicationType=APM'
   SERVICE='/controller/restui/allApplications/createApplication?applicationType=APM'
   #curl $VERBOSE -s -b $CURL_SESSION_FILE \
-  #     --header "Origin: http://$APPD_CONTROLLER_HOST:$APPD_CONTROLLER_PORT" \
+  #     --header "Origin: http://$APPDYNAMICS_CONTROLLER_HOST_NAME:$APPDYNAMICS_CONTROLLER_PORT" \
   #     --header "Accept-Encoding: text" \
   #     --header "Accept-Language: en-US,en;q=0.9" \
   #     --header "X-CSRF-TOKEN: ${XCSRFTOKEN}" \
   #     --header "Content-Type: application/json;charset=utf-8" \
   #     --header "Accept: application/json, text/plain, */*" \
-  #     --header "Referer: http://$APPD_CONTROLLER_HOST:$APPD_CONTROLLER_PORT/controller/" \
+  #     --header "Referer: http://$APPDYNAMICS_CONTROLLER_HOST_NAME:$APPDYNAMICS_CONTROLLER_PORT/controller/" \
   #     --header "Connection: keep-alive" \
   #     --data-binary "${PARAMS}" \
   #     --compressed \
-  #     -X POST http://$APPD_CONTROLLER_HOST:$APPD_CONTROLLER_PORT$SERVICE
+  #     -X POST http://$APPDYNAMICS_CONTROLLER_HOST_NAME:$APPDYNAMICS_CONTROLLER_PORT$SERVICE
   _http2 "POST" "http" "/controller/restui/allApplications/createApplication?applicationType=APM" "$PARAMS"
 
 
@@ -171,24 +215,22 @@ elif [ $cmd == "gn" ]; then
 
   SERVICE='/controller/rest/applications/1/nodes'
   curl $VERBOSE -s -b $CURL_SESSION_FILE \
-       --header "Origin: http://$APPD_CONTROLLER_HOST:$APPD_CONTROLLER_PORT" \
+       --header "Origin: http://$APPDYNAMICS_CONTROLLER_HOST_NAME:$APPDYNAMICS_CONTROLLER_PORT" \
        --header "Accept-Encoding: text" \
        --header "Accept-Language: en-US,en;q=0.9" \
        --header "X-CSRF-TOKEN: ${XCSRFTOKEN}" \
        --header "Content-Type: application/json;charset=utf-8" \
        --header "Accept: application/json, text/plain, */*" \
-       --header "Referer: http://$APPD_CONTROLLER_HOST:$APPD_CONTROLLER_PORT/controller/" \
+       --header "Referer: http://$APPDYNAMICS_CONTROLLER_HOST_NAME:$APPDYNAMICS_CONTROLLER_PORT/controller/" \
        --header "Connection: keep-alive" \
-       -X GET http://$APPD_CONTROLLER_HOST:$APPD_CONTROLLER_PORT$SERVICE
+       -X GET http://$APPDYNAMICS_CONTROLLER_HOST_NAME:$APPDYNAMICS_CONTROLLER_PORT$SERVICE
 
-
- #####################################
- # Create an AppDynamce APM applicaiton in the controller
- #
-elif [ $cmd == "getApplications" ]; then
+#####################################
+#
+#
+elif [ $cmd == "getApps" ]; then
   _controllerAutheticate
   _http "GET" "http" "/controller/rest/applications?output=JSON" ""
-  #echo $HTTP_RESULT | jq -r '[.[] | {name: .name, id: .id} ]'
 
   for row in $(echo "${HTTP_RESULT}" | jq -r '.[] | @base64'); do
      name=$(_getValue ${row} '.name')
@@ -197,12 +239,95 @@ elif [ $cmd == "getApplications" ]; then
   done
 
 #####################################
-# getNodes
 #
-elif [ $cmd == "getNodes" ]; then
+#
+elif [ $cmd == "getAppId" ]; then
+  APP_NAME=${2:-"Error Application Name Missing"}
   _controllerAutheticate
-  _http "GET" "http" "/controller/rest/applications/7/nodes?output=JSON" ""
-  echo $HTTP_RESULT | jq
+  APP_ID=$(_controllerGetApplicationId ${APP_NAME})
+
+  if [ "$APP_ID" != "" ]; then
+    echo "Application: $APP_NAME ID: $APP_ID"
+  else
+    echo "Application not found: $APP_NAME"
+  fi
+
+#####################################
+# Get all nodes in an application
+#
+elif [ $cmd == "getAppNodes" ]; then
+  APP_NAME=${2:-"Error Application Name Missing"}
+  _controllerAutheticate
+  HTTP_RESULT=$(_controllerGetAppNodes $APP_NAME "." ".")
+
+  APP_ID=$(_controllerGetApplicationId ${APP_NAME})
+  if [ "$APP_ID" != "" ]; then
+    echo "Application: $APP_NAME ID: $APP_ID"
+    #echo $HTTP_RESULT | jq
+    for row in $(echo "${HTTP_RESULT}" | jq -r '.[] | @base64'); do
+       name=$(_getValue ${row} '.name')
+       id=$(_getValue ${row} '.id')
+       agentType=$(_getValue ${row} '.agentType')
+       machineAgentPresent=$(_getValue ${row} '.machineAgentPresent')
+       tierName=$(_getValue ${row} '.tierName')
+       echo $name $id $agentType $tierName $machineAgentPresent
+    done
+  else
+    echo "Application not found: $APP_NAME"
+  fi
+
+#####################################
+# appNodeMonitoring <APP_NAME> <NODE_NAME> ENABLE | DISABLE
+# Enable disable application agents
+#
+elif [ $cmd == "appNodeMonitoring" ]; then
+  APP_NAME=${2:-"Error Application Name Missing"}
+  TIER_NAME=${3:-"Error Tier Name Missing"}
+  NODE_NAME=${4:-"Error Node Name Missing"}
+  MONITORING_STATE=${5:-"Error Node Monitoring State"}
+  _controllerAutheticate
+  HTTP_RESULT=$(_controllerGetAppNodes $APP_NAME $TIER_NAME $NODE_NAME)
+
+  if [ "$MONITORING_STATE" == "ENABLE" ] || [ "$MONITORING_STATE" == "DISABLE" ]; then
+  for row in $(echo "${HTTP_RESULT}" | jq -r '.[] | @base64'); do
+     name=$(_getValue ${row} '.name')
+     node_id=$(_getValue ${row} '.id')
+     agentType=$(_getValue ${row} '.agentType')
+     machineAgentPresent=$(_getValue ${row} '.machineAgentPresent')
+     tierName=$(_getValue ${row} '.tierName')
+     echo "Changing monitoring state: $MONITORING_STATE $name $node_id $agentType $tierName $machineAgentPresent"
+     case "$MONITORING_STATE" in
+        ENABLE)
+            _controllerEnableNodeMonitoring $node_id
+            ;;
+        DISABLE)
+            _controllerDisableNodeMonitoring $node_id
+            ;;
+        *)
+            echo "Error: Monitoring state [$MONITORING_STATE] invalid"
+            exit 1
+      esac
+      sleep 1
+  done
+else
+  echo "Error: Monitoring state [$MONITORING_STATE] invalid"
+fi
+
+#####################################
+# disableNode
+#
+elif [ $cmd == "disableNode" ]; then
+  NODE_ID=${2:-"NONE_NONE"}
+  _controllerAutheticate
+  _controllerDisableNodeMonitoring $NODE_ID
+
+#####################################
+# enableNode
+#
+elif [ $cmd == "enableNode" ]; then
+  NODE_ID=${2:-"NONE_NONE"}
+  _controllerAutheticate
+  _controllerEnableNodeMonitoring $NODE_ID
 
 
 #####################################
@@ -246,6 +371,18 @@ elif [ $cmd == "getUser" ]; then
   _http "GET" "http" "/controller/api/rbac/v1/users/name/$USER_NAME" ""
   echo $HTTP_RESULT | jq
 
+#####################################
+# Under Development
+#
+elif [ $cmd == "UDappserver" ]; then
+  _controllerAutheticate
+  _http "POST" "http" "/controller/restui/agents/list/appserver" ""
+  echo $HTTP_RESULT
+
+  #{"requestFilter":{"queryParams":{"applicationAssociationType":"ASSOCIATED_WITH_APPLICATION"},"filters":[]},"resultColumns":[],"offset":0,"limit":-1,"searchFilters":[{"columns":["HOST_NAME","NODE_NAME","COMPONENT_NAME","APPLICATION_NAME"],"query":"java_"}],"columnSorts":[{"column":"HOST_NAME","direction":"ASC"}],"timeRangeStart":1563394667785,"timeRangeEnd":1563398267785}
+
+ # http://dryderc1-drydertest1-lbthj36l.srv.ravcloud.com:8090/controller/restui/agents/list/appserver/ids
+
 else
   echo "Command error: "$cmd
   showHelp="YES"
@@ -261,11 +398,11 @@ if [ $showHelp == "xYES" ]; then
   echo " authenticate - test authentication against the controller"
   echo
   echo "Requries the following Environment Variables:"
-  echo " export APPD_USER_NAME=<...>"
-  echo " export APPD_ACCOUNT=<...>"
-  echo " export APPD_PWD=<...>"
-  echo " export APPD_CONTROLLER_HOST=<...>"
-  echo " export APPD_CONTROLLER_PORT=8090"
+  echo " export APPD_CONTROLLER_ADMIN=<...>"
+  echo " export APPDYNAMICS_AGENT_ACCOUNT_NAME=<...>"
+  echo " export APPD_UNIVERSAL_PWD=<...>"
+  echo " export APPDYNAMICS_CONTROLLER_HOST_NAME=<...>"
+  echo " export APPDYNAMICS_CONTROLLER_PORT=8090"
 fi
 
 exit 0
