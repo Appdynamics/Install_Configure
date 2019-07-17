@@ -42,7 +42,7 @@ _validateEnvironmentVars() {
 
 _controllerAutheticate() {
   # Authentication to Controller
-  _validateEnvironmentVars "Authentication to controller" \
+  _validateEnvironmentVars "Authentication-basic to controller" \
         "APPD_CONTROLLER_ADMIN" "APPD_ACCOUNT" "APPD_UNIVERSAL_PWD" \
         "APPD_CONTROLLER_HOST" "APPD_CONTROLLER_PORT"
 
@@ -82,23 +82,25 @@ _http() {
        -X $METHOD $PROTOCOL://$APPD_CONTROLLER_HOST:$APPD_CONTROLLER_PORT$SERVICE`
 }
 
-# Required environment variables for install
-_validateEnvironmentVars "Controller Install" \
-            "APPD_CONTROLLER_HOST1" "APPD_CONTROLLER_HOST2" \
-            "APPD_EVENTS_SERVICE_HOST1" "APPD_EVENTS_SERVICE_HOST2" "APPD_EVENTS_SERVICE_HOST3" \
-            "APPD_CONTROLLER_PORT" \
-            "APPD_CONTROLLER_INSTALL_DIR" "APPD_SSH_PRI_KEY_FILE" \
-            "APPD_SSH_CREDENTIAL_NAME" "APPD_SSH_USER_NAME" "APPD_PLATFORM_NAME" \
-            "APPD_CONTROLLER_MODE" "APPD_CONTROLLER_PROFILE" "APPD_CONTROLLER_ADMIN" \
-            "APPD_UNIVERSAL_PWD" "APPD_LICENSE_FILE" "APPD_EVENTSSERVICE_PROFILE"  \
-            "APPD_VERSION" "APPD_RELEASE_NUMBER"
+
+if [ $cmd == "validate" ]; then
+  # Required environment variables for install
+  _validateEnvironmentVars "Controller Install" \
+              "APPD_CONTROLLER_HOST1" "APPD_CONTROLLER_HOST2" \
+              "APPD_EVENTS_SERVICE_HOST1" "APPD_EVENTS_SERVICE_HOST2" "APPD_EVENTS_SERVICE_HOST3" \
+              "APPD_CONTROLLER_PORT" \
+              "APPD_CONTROLLER_INSTALL_DIR" "APPD_SSH_PRI_KEY_FILE" \
+              "APPD_SSH_CREDENTIAL_NAME" "APPD_SSH_USER_NAME" "APPD_PLATFORM_NAME" \
+              "APPD_CONTROLLER_MODE" "APPD_CONTROLLER_PROFILE" "APPD_CONTROLLER_ADMIN" \
+              "APPD_UNIVERSAL_PWD" "APPD_LICENSE_FILE" "APPD_EVENTSSERVICE_PROFILE"  \
+              "APPD_VERSION" "APPD_RELEASE_NUMBER"
+
+elif [ $cmd == "login" ]; then
+  _login
 
 #####################################
 # Create a Platform
 #
-if [ $cmd == "login" ]; then
-   _login
-
 elif [ $cmd == "createPlatform" ]; then
   _validateEnvironmentVars "Create Platform" \
               "APPD_PLATFORM_ADMIN_CMD" "APPD_PLATFORM_NAME" "APPD_CONTROLLER_INSTALL_DIR"
@@ -136,7 +138,9 @@ elif [ $cmd == "addLocalHost" ]; then
 
 elif [ $cmd == "addRemoteHost" ]; then
     # Add a remote host
-    HOST_NAME=${2:-"Host_Name_Missing"}
+    HOST_NAME=${2:-""}
+    _validateEnvironmentVars "Controller Login" \
+                "APPD_PLATFORM_ADMIN_CMD" "HOST_NAME" "APPD_SSH_CREDENTIAL_NAME" "APPD_PLATFORM_NAME"
     $APPD_PLATFORM_ADMIN_CMD add-hosts --hosts $HOST_NAME \
       --credential $APPD_SSH_CREDENTIAL_NAME \
       --platform-name $APPD_PLATFORM_NAME
@@ -146,7 +150,10 @@ elif [ $cmd == "addRemoteHost" ]; then
 #
 elif [ $cmd == "installPrimaryController" ]; then
     _login
-
+    _validateEnvironmentVars "Install Primary Controller" \
+                "APPD_PLATFORM_ADMIN_CMD" "APPD_PLATFORM_NAME" \
+                "APPD_CONTROLLER_HOST1" "APPD_CONTROLLER_PROFILE" "APPD_CONTROLLER_MODE" \
+                "APPD_CONTROLLER_ADMIN" "APPD_UNIVERSAL_PWD"
     # Install controller
     $APPD_PLATFORM_ADMIN_CMD submit-job --service controller --job install \
       --platform-name $APPD_PLATFORM_NAME \
@@ -188,6 +195,12 @@ elif [ $cmd == "licenseRemote" ]; then
 # Install the Events Service
 #
 elif [ $cmd == "installSingleEventsService" ]; then
+  _login
+  _validateEnvironmentVars "Install Single Events Service" \
+              "APPD_PLATFORM_ADMIN_CMD" "APPD_EVENTSSERVICE_PROFILE" \
+              "APPD_EVENTS_SERVICE_HOST1" "APPD_CONTROLLER_INSTALL_DIR" \
+              "APPD_PLATFORM_NAME"
+
   # Install Single Events Service
   $APPD_PLATFORM_ADMIN_CMD install-events-service \
     --profile $APPD_EVENTSSERVICE_PROFILE \
@@ -230,10 +243,30 @@ elif [ $cmd == "enableEventsService" ]; then
     # events-service/processor/conf/events-service-api-store.properties
     # ad.bizoutcome.enabled=true
 
+
+# http://dryderc1-drydertest1-lbthj36l.srv.ravcloud.com:8090/controller/admin.jsp#/location=ADMIN_HOME
+
+# http://dryderc1-drydertest1-lbthj36l.srv.ravcloud.com:8090/controller/admin.jsp#/location=ADMIN_CONTROLLER_ADMIN&timeRange=last_1_hour.BEFORE_NOW.-1.-1.60
+# http://demo.appdynamics.com/controller/rest/configuration
+elif [ $cmd == "controllerConfig" ]; then
+  # Requires jq (apt-get install jq | yum install jq)
+  _validateEnvironmentVars "Account Information" \
+            "APPD_CONTROLLER_ADMIN" "APPD_ACCOUNT" "APPD_UNIVERSAL_PWD" \
+            "APPD_CONTROLLER_HOST" "APPD_CONTROLLER_PORT"
+  _controllerAutheticate
+  _http "GET" "http" "/controller/rest/configuration?output=json" ""
+  echo $HTTP_RESULT | jq
+
+
+
 elif [ $cmd == "accountInfo" ]; then
   # Requires jq (apt-get install jq | yum install jq)
+  _validateEnvironmentVars "Account Information" \
+            "APPD_CONTROLLER_ADMIN" "APPD_ACCOUNT" "APPD_UNIVERSAL_PWD" \
+            "APPD_CONTROLLER_HOST" "APPD_CONTROLLER_PORT"
   _controllerAutheticate
-  _http "GET" "http" "/controller/restui/user/account" ""
+  _http "GET" "http" "/controller/restui/user/account?output=json" ""
+  #echo $HTTP_RESULT | jq
 
   # Setup envvars
   APPDYNAMICS_CONTROLLER_HOST_NAME=$APPD_CONTROLLER_HOST
@@ -243,22 +276,33 @@ elif [ $cmd == "accountInfo" ]; then
   APPDYNAMICS_GLOBAL_ACCOUNT_NAME=`echo $HTTP_RESULT | jq -r .account.globalAccountName`
 
   # Export envvars for agent configuration
-
+  echo "#!/bin/bash"
+  echo "#"
+  echo "#User Access"
+  echo "export APPD_CONTROLLER_ADMIN=$APPD_CONTROLLER_ADMIN"
+  echo "export APPD_UNIVERSAL_PWD=$APPD_UNIVERSAL_PWD"
+  echo "#"
   echo "# Agent configuration"
   echo "export APPDYNAMICS_CONTROLLER_HOST_NAME=$APPDYNAMICS_CONTROLLER_HOST_NAME"
   echo "export APPDYNAMICS_CONTROLLER_PORT=$APPDYNAMICS_CONTROLLER_PORT"
   echo "export APPDYNAMICS_CONTROLLER_SSL_ENABLED=false"
+  echo "#"
+  echo "# Account Access"
   echo "export APPDYNAMICS_AGENT_ACCOUNT_ACCESS_KEY=$APPDYNAMICS_AGENT_ACCOUNT_ACCESS_KEY"
   echo "export APPDYNAMICS_AGENT_ACCOUNT_NAME=$APPDYNAMICS_AGENT_ACCOUNT_NAME"
   echo "export APPDYNAMICS_GLOBAL_ACCOUNT_NAME=$APPDYNAMICS_GLOBAL_ACCOUNT_NAME"
+  echo "#"
+  echo "# Events Service"
   echo "export APPDYNAMICS_ANALYTICS_AGENT_URL=http://localhost:9090/v2/sinks/bt"
   echo "export APPDYNAMICS_EVENTS_SERVICE_ENDPOINT=http://----URL----:9080"
+  echo "#"
   echo "export APPDYNAMICS_SIM_ENABLED=true"
-
+  echo "# "
   echo "# App, Tier, Node  Names"
-  echo "export APPDYNAMICS_AGENT_APPLICATION_NAME=APP_TEST_1"
-  echo "export APPDYNAMICS_AGENT_TIER_NAME=APP_TIER_T1"
-  echo "export APPDYNAMICS_AGENT_NODE_NAME=APP_NODE_N1"
+  echo "#export APPDYNAMICS_AGENT_APPLICATION_NAME=APP_TEST_1"
+  echo "#export APPDYNAMICS_AGENT_TIER_NAME=APP_TIER_T1"
+  echo "#export APPDYNAMICS_AGENT_NODE_NAME=APP_NODE_N1"
+  echo "#export APPDYNAMICS_APP_AGENT_JAR_FILE=..../javaagent.jar"
 
 
 #####################################
@@ -283,6 +327,7 @@ elif [ $cmd == "controllerStatus" ]; then
     curl $APPD_CONTROLLER_HOST2:$APPD_CONTROLLER_PORT/controller/rest/serverstatus
 
 elif [ $cmd == "eventsServiceStatus" ]; then
+  # Healthcheck the events services node
   curl $APPD_EVENTS_SERVICE_HOST1:9081/healthcheck?pretty=true
   curl $APPD_EVENTS_SERVICE_HOST2:9081/healthcheck?pretty=true
   curl $APPD_EVENTS_SERVICE_HOST3:9081/healthcheck?pretty=true
@@ -322,6 +367,7 @@ else
   echo "installEventsService"
   echo "deletePlatform"
   echo "controllerStatus"
+  echo "AccountInfo"
 
 fi
 

@@ -25,15 +25,18 @@ $APPD_PLATFORM_ADMIN_CMD remove-hosts --hosts $APPD_EVENTS_SERVICE_HOST1 --platf
 $APPD_PLATFORM_ADMIN_CMD remove-hosts --hosts $APPD_EVENTS_SERVICE_HOST2 --platform-name $APPD_PLATFORM_NAME
 $APPD_PLATFORM_ADMIN_CMD remove-hosts --hosts $APPD_EVENTS_SERVICE_HOST3 --platform-name $APPD_PLATFORM_NAME
 
-$APPD_PLATFORM_ADMIN_CMD remove-dead-hosts --hosts $APPD_CONTROLLER_HOST1 --platform-name $APPD_PLATFORM_NAME
-$APPD_PLATFORM_ADMIN_CMD remove-dead-hosts --hosts $APPD_CONTROLLER_HOST2 --platform-name $APPD_PLATFORM_NAME
+if [ "$APPD_FORCE_REMOVE_HOSTS" == "YES" ]; then
+  $APPD_PLATFORM_ADMIN_CMD remove-dead-hosts --hosts $APPD_CONTROLLER_HOST1 --platform-name $APPD_PLATFORM_NAME
+  $APPD_PLATFORM_ADMIN_CMD remove-dead-hosts --hosts $APPD_CONTROLLER_HOST2 --platform-name $APPD_PLATFORM_NAME
 
-$APPD_PLATFORM_ADMIN_CMD remove-dead-hosts --hosts $APPD_EVENTS_SERVICE_HOST1 --platform-name $APPD_PLATFORM_NAME
-$APPD_PLATFORM_ADMIN_CMD remove-dead-hosts --hosts $APPD_EVENTS_SERVICE_HOST2 --platform-name $APPD_PLATFORM_NAME
-$APPD_PLATFORM_ADMIN_CMD remove-dead-hosts --hosts $APPD_EVENTS_SERVICE_HOST3 --platform-name $APPD_PLATFORM_NAME
+  $APPD_PLATFORM_ADMIN_CMD remove-dead-hosts --hosts $APPD_EVENTS_SERVICE_HOST1 --platform-name $APPD_PLATFORM_NAME
+  $APPD_PLATFORM_ADMIN_CMD remove-dead-hosts --hosts $APPD_EVENTS_SERVICE_HOST2 --platform-name $APPD_PLATFORM_NAME
+  $APPD_PLATFORM_ADMIN_CMD remove-dead-hosts --hosts $APPD_EVENTS_SERVICE_HOST3 --platform-name $APPD_PLATFORM_NAME
+fi
 
+# Credentials
 $APPD_PLATFORM_ADMIN_CMD list-credentials --platform-name $APPD_PLATFORM_NAME
-
 $APPD_PLATFORM_ADMIN_CMD remove-credential --credential-name $APPD_SSH_CREDENTIAL_NAME --platform-name $APPD_PLATFORM_NAME
 
+# Platform
 $APPD_PLATFORM_ADMIN_CMD delete-platform --name $APPD_PLATFORM_NAME
