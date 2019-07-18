@@ -9,7 +9,7 @@
 #   accountInfo
 #   getApps
 #   getAppNodes
-#   appNodeMonitoring
+#   nodeMonitoring
 #
 # Requires:
 #    jq  - https://stedolan.github.io/jq/ - sudo apt-get install jq
@@ -131,6 +131,8 @@ _controllerAppNodeMonitoring() {
     _http "POST" "http" "/controller/restui/agent/setting/enableAppServerAgentForNode/$_NODE_ID" ""
   elif [ "$_STATE" == "DISABLE" ]; then
     _http "POST" "http" "/controller/restui/agent/setting/disableAppServerAgentForNode/$_NODE_ID?disableMonitoring=true" ""
+  elif [ "$_STATE" == "RESET" ]; then
+    _http2 "POST" "http" "/controller/restui/agent/setting/requestAppServerAgentReregistrationForNodes" "[$_NODE_ID]"
   else
     echo "Error: _controllerAppNodeMonitoring invalid state: [$_NODE_ID] [$_STATE]"
   fi
@@ -143,6 +145,8 @@ _controllerMacNodeMonitoring() {
     _http2 "POST" "http" "/controller/restui/agent/setting/toggleMachineAgentEnable?enabledFlag=true&entityType=MACHINE_INSTANCE" "[$_NODE_ID]"
   elif [ "$_STATE" == "DISABLE" ]; then
     _http2 "POST" "http" "/controller/restui/agent/setting/toggleMachineAgentEnable?enabledFlag=false&entityType=MACHINE_INSTANCE" "[$_NODE_ID]"
+  elif [ "$_STATE" == "RESET" ]; then
+    _http2 "POST" "http" "/controller/restui/agent/setting/requestAgentReregistration?id=$_NODE_ID"
   else
     echo "Error: _controllerMacNodeMonitoring invalid state: [$_NODE_ID] [$_STATE]"
   fi
@@ -290,29 +294,29 @@ elif [ $cmd == "getAppNodes" ]; then
     echo "Application not found: $APP_NAME"
   fi
 
-  #####################################
-  # Get all nodes in an application
-  #
-  elif [ $cmd == "getAppNodes" ]; then
-    APP_NAME=${2:-"Error Application Name Missing"}
-    _controllerAutheticate
-    HTTP_RESULT=$(_controllerGetAppNodes $APP_NAME "." ".")
+#####################################
+# Get all nodes in an application
+#
+elif [ $cmd == "getAppNodes" ]; then
+  APP_NAME=${2:-"Error Application Name Missing"}
+  _controllerAutheticate
+  HTTP_RESULT=$(_controllerGetAppNodes $APP_NAME "." ".")
 
-    APP_ID=$(_controllerGetApplicationId ${APP_NAME})
-    if [ "$APP_ID" != "" ]; then
-      echo "Application: $APP_NAME ID: $APP_ID"
-      #echo $HTTP_RESULT | jq
-      for row in $(echo "${HTTP_RESULT}" | jq -r '.[] | @base64'); do
-         name=$(_getValue ${row} '.name')
-         id=$(_getValue ${row} '.id')
-         agentType=$(_getValue ${row} '.agentType')
-         machineAgentPresent=$(_getValue ${row} '.machineAgentPresent')
-         tierName=$(_getValue ${row} '.tierName')
-         echo $name $id $agentType $tierName $machineAgentPresent
-      done
-    else
-      echo "Application not found: $APP_NAME"
-    fi
+  APP_ID=$(_controllerGetApplicationId ${APP_NAME})
+  if [ "$APP_ID" != "" ]; then
+    echo "Application: $APP_NAME ID: $APP_ID"
+    #echo $HTTP_RESULT | jq
+    for row in $(echo "${HTTP_RESULT}" | jq -r '.[] | @base64'); do
+       name=$(_getValue ${row} '.name')
+       id=$(_getValue ${row} '.id')
+       agentType=$(_getValue ${row} '.agentType')
+       machineAgentPresent=$(_getValue ${row} '.machineAgentPresent')
+       tierName=$(_getValue ${row} '.tierName')
+       echo $name $id $agentType $tierName $machineAgentPresent
+    done
+  else
+    echo "Application not found: $APP_NAME"
+  fi
 
 #####################################
 # appNodeMonitoring <APP_NAME> <NODE_NAME> ENABLE_APP | DISABLE_APP | ENABLE_MAC | DISABLE_MAC
@@ -340,11 +344,17 @@ elif [ $cmd == "nodeMonitoring" ]; then
         DISABLE_APP)
             _controllerAppNodeMonitoring $node_id "DISABLE"
             ;;
+        RESET_APP)
+            _controllerAppNodeMonitoring $node_id "RESET"
+            ;;
         ENABLE_MAC)
             _controllerMacNodeMonitoring $machineId "ENABLE"
             ;;
         DISABLE_MAC)
             _controllerMacNodeMonitoring $machineId "DISABLE"
+            ;;
+        RESET_MAC)
+            _controllerMacNodeMonitoring $machineId "RESET"
             ;;
         *)
             echo "Error: Monitoring state [$MONITORING_STATE] invalid"
