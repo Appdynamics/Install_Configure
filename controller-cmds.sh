@@ -131,6 +131,7 @@ _controllerGetAppNodes() {
 _controllerNodeMonitoring() {
   _NODE_ID=${1:-"NONE_NONE"}
   _MONITORING_STATE=${2:-"NONE_NONE"}
+  echo "_controllerNodeMonitoring Changing monitoring state: NODE $_NODE_ID, STATE $_MONITORING_STATE"
   case "$_MONITORING_STATE" in
     ENABLE_APP)
        _http "POST" "http" "/controller/restui/agent/setting/enableAppServerAgentForNode/$_NODE_ID" ""
@@ -163,9 +164,9 @@ if [ $cmd == "authenticate" ]; then
   _controllerAutheticate
   cat $CURL_SESSION_FILE
 
-  #####################################
-  # Create an AppDynamce APM applicaiton in the controller
-  #
+#####################################
+# Create an AppDynamce APM applicaiton in the controller
+#
  elif [ $cmd == "accountInfo" ]; then
    _controllerAutheticate
    _http "GET" "http" "/controller/restui/user/account" ""
@@ -324,7 +325,6 @@ elif [ $cmd == "nodeMonitoring" ]; then
        machineAgentPresent=$(_getValue ${row} '.machineAgentPresent')
        tierName=$(_getValue ${row} '.tierName')
        machineId=$(_getValue ${row} '.machineId')
-       echo "Changing APP monitoring state: $MONITORING_STATE $name $node_id $agentType $tierName $machineAgentPresent $machineId"
        _controllerNodeMonitoring $node_id "$MONITORING_STATE"
        sleep 1
     done
@@ -337,7 +337,6 @@ elif [ $cmd == "nodeMonitoring" ]; then
        machineAgentPresent=$(_getValue ${row} '.machineAgentPresent')
        tierName=$(_getValue ${row} '.tierName')
        machineId=$(_getValue ${row} '.machineId')
-       echo "Changing MAC monitoring state: $MONITORING_STATE $name $machineId $agentType $tierName $machineAgentPresent "
        _controllerNodeMonitoring $machineId "$MONITORING_STATE"
        sleep 1
     done
