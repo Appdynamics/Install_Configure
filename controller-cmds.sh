@@ -86,7 +86,7 @@ _http2() {
        --header "Accept-Encoding: text" \
        --header "Accept-Language: en-US,en;q=0.9" \
        --header "X-CSRF-TOKEN: ${XCSRFTOKEN}" \
-       --header "Content-Type: application/json;charset=utf-8" \
+       --header "Content-Type: application/json;charset=UTF-8" \
        --header "Accept: application/json, text/plain, */*" \
        --header "Referer: http://$APPDYNAMICS_CONTROLLER_HOST_NAME:$APPDYNAMICS_CONTROLLER_PORT/controller/" \
        --data-binary "${POST_DATA}" \
@@ -114,7 +114,7 @@ _controllerGetAppNodes() {
   RESULT=""
   APP_ID=$(_controllerGetApplicationId ${APP_NAME})
   if [ "$APP_ID" != "" ]; then
-    _http "GET" "http" "/controller/rest/applications/$APP_ID/nodes?output=JSON" ""
+    _http "GET" "http" "/controller/rest/applications/$APP_NAME/nodes?output=JSON" ""
     RESULT=`echo "${HTTP_RESULT}" | jq --arg NODE_NAME "$NODE_NAME" --arg TIER_NAME "$TIER_NAME"  \
             -r  '[.[] | select((.tierName | test($TIER_NAME)) and (.name | test($NODE_NAME)))]' `
   else
@@ -124,14 +124,28 @@ _controllerGetAppNodes() {
   echo $RESULT
 }
 
-_controllerDisableNodeMonitoring() {
+_controllerAppNodeMonitoring() {
   _NODE_ID=${1:-"NONE_NONE"}
-  _http "POST" "http" "/controller/restui/agent/setting/disableAppServerAgentForNode/$_NODE_ID?disableMonitoring=true" ""
+  _STATE=${2:-"NONE_NONE"}
+  if [ "$_STATE" == "ENABLE" ]; then
+    _http "POST" "http" "/controller/restui/agent/setting/enableAppServerAgentForNode/$_NODE_ID" ""
+  elif [ "$_STATE" == "DISABLE" ]; then
+    _http "POST" "http" "/controller/restui/agent/setting/disableAppServerAgentForNode/$_NODE_ID?disableMonitoring=true" ""
+  else
+    echo "Error: _controllerAppNodeMonitoring invalid state: [$_NODE_ID] [$_STATE]"
+  fi
 }
 
-_controllerEnableNodeMonitoring() {
+_controllerMacNodeMonitoring() {
   _NODE_ID=${1:-"NONE_NONE"}
-  _http "POST" "http" "/controller/restui/agent/setting/enableAppServerAgentForNode/$_NODE_ID" ""
+  _STATE=${2:-"NONE_NONE"}
+  if [ "$_STATE" == "ENABLE" ]; then
+    _http2 "POST" "http" "/controller/restui/agent/setting/toggleMachineAgentEnable?enabledFlag=true&entityType=MACHINE_INSTANCE" "[$_NODE_ID]"
+  elif [ "$_STATE" == "DISABLE" ]; then
+    _http2 "POST" "http" "/controller/restui/agent/setting/toggleMachineAgentEnable?enabledFlag=false&entityType=MACHINE_INSTANCE" "[$_NODE_ID]"
+  else
+    echo "Error: _controllerMacNodeMonitoring invalid state: [$_NODE_ID] [$_STATE]"
+  fi
 }
 
 #####################################
@@ -276,32 +290,61 @@ elif [ $cmd == "getAppNodes" ]; then
     echo "Application not found: $APP_NAME"
   fi
 
+  #####################################
+  # Get all nodes in an application
+  #
+  elif [ $cmd == "getAppNodes" ]; then
+    APP_NAME=${2:-"Error Application Name Missing"}
+    _controllerAutheticate
+    HTTP_RESULT=$(_controllerGetAppNodes $APP_NAME "." ".")
+
+    APP_ID=$(_controllerGetApplicationId ${APP_NAME})
+    if [ "$APP_ID" != "" ]; then
+      echo "Application: $APP_NAME ID: $APP_ID"
+      #echo $HTTP_RESULT | jq
+      for row in $(echo "${HTTP_RESULT}" | jq -r '.[] | @base64'); do
+         name=$(_getValue ${row} '.name')
+         id=$(_getValue ${row} '.id')
+         agentType=$(_getValue ${row} '.agentType')
+         machineAgentPresent=$(_getValue ${row} '.machineAgentPresent')
+         tierName=$(_getValue ${row} '.tierName')
+         echo $name $id $agentType $tierName $machineAgentPresent
+      done
+    else
+      echo "Application not found: $APP_NAME"
+    fi
+
 #####################################
-# appNodeMonitoring <APP_NAME> <NODE_NAME> ENABLE | DISABLE
-# Enable disable application agents
+# appNodeMonitoring <APP_NAME> <NODE_NAME> ENABLE_APP | DISABLE_APP | ENABLE_MAC | DISABLE_MAC
+# Enable disable application and machine agents
 #
-elif [ $cmd == "appNodeMonitoring" ]; then
+elif [ $cmd == "nodeMonitoring" ]; then
   APP_NAME=${2:-"Error Application Name Missing"}
   TIER_NAME=${3:-"Error Tier Name Missing"}
   NODE_NAME=${4:-"Error Node Name Missing"}
   MONITORING_STATE=${5:-"Error Node Monitoring State"}
   _controllerAutheticate
   HTTP_RESULT=$(_controllerGetAppNodes $APP_NAME $TIER_NAME $NODE_NAME)
-
-  if [ "$MONITORING_STATE" == "ENABLE" ] || [ "$MONITORING_STATE" == "DISABLE" ]; then
   for row in $(echo "${HTTP_RESULT}" | jq -r '.[] | @base64'); do
      name=$(_getValue ${row} '.name')
      node_id=$(_getValue ${row} '.id')
      agentType=$(_getValue ${row} '.agentType')
      machineAgentPresent=$(_getValue ${row} '.machineAgentPresent')
      tierName=$(_getValue ${row} '.tierName')
-     echo "Changing monitoring state: $MONITORING_STATE $name $node_id $agentType $tierName $machineAgentPresent"
+     machineId=$(_getValue ${row} '.machineId')
+     echo "Changing monitoring state: $MONITORING_STATE $name $node_id $agentType $tierName $machineAgentPresent $machineId"
      case "$MONITORING_STATE" in
-        ENABLE)
-            _controllerEnableNodeMonitoring $node_id
+        ENABLE_APP)
+            _controllerAppNodeMonitoring $node_id "ENABLE"
             ;;
-        DISABLE)
-            _controllerDisableNodeMonitoring $node_id
+        DISABLE_APP)
+            _controllerAppNodeMonitoring $node_id "DISABLE"
+            ;;
+        ENABLE_MAC)
+            _controllerMacNodeMonitoring $machineId "ENABLE"
+            ;;
+        DISABLE_MAC)
+            _controllerMacNodeMonitoring $machineId "DISABLE"
             ;;
         *)
             echo "Error: Monitoring state [$MONITORING_STATE] invalid"
@@ -309,9 +352,7 @@ elif [ $cmd == "appNodeMonitoring" ]; then
       esac
       sleep 1
   done
-else
-  echo "Error: Monitoring state [$MONITORING_STATE] invalid"
-fi
+
 
 #####################################
 # disableNode
