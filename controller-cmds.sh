@@ -6,11 +6,12 @@
 #
 # Commands:
 #   authenticate
+#   getSqlCalls
 #   accountInfo
 #   getApps
-#   getAppNodes
-#   nodeMonitoring
-#
+#   getAppNodes <APP-NAME>
+#   nodeMonitoring <APP-NAME> <TIER-NAME> <NODE-NAME> ENABLE_[APP | MAC] | DISABLE_[APP | MAC] | RESET_[APP | MAC]
+#   nodeMonitoringFromFile <node list file> ENABLE_APP | DISABLE_APP | RESET_APP
 # Requires:
 #    jq  - https://stedolan.github.io/jq/ - sudo apt-get install jq
 #
@@ -45,8 +46,7 @@ _controllerAutheticate() {
   rm -f $CURL_SESSION_FILE
   R=`curl $VERBOSE -s -c $CURL_SESSION_FILE --write-out %{http_code} \
        --user "$APPD_FULL_USER" \
-       -X GET http://$APPDYNAMICS_CONTROLLER_HOST_NAME:$APPDYNAMICS_CONTROLLER_PORT/controller/auth?action=login`
-  echo "[$R]"
+       -X GET $HTTP_PROTOCOL://$APPDYNAMICS_CONTROLLER_HOST_NAME:$APPDYNAMICS_CONTROLLER_PORT/controller/auth?action=login`
 
   if [ -e $CURL_SESSION_FILE ]; then
     # Get X-CSRF-TOKEN
@@ -56,10 +56,10 @@ _controllerAutheticate() {
   fi
 
   if [ "$XCSRFTOKEN" == "" ]; then
-    echo "Failed to authenticate to controller: $APPDYNAMICS_CONTROLLER_HOST_NAME:$APPDYNAMICS_CONTROLLER_PORT"
+    echo "Failed to authenticate to controller: $APPDYNAMICS_CONTROLLER_HOST_NAME:$APPDYNAMICS_CONTROLLER_PORT [$R]"
     exit 1
   else
-    echo "Authentication sucessful: $APPDYNAMICS_CONTROLLER_HOST_NAME:$APPDYNAMICS_CONTROLLER_PORT"
+    echo "Authentication sucessful: $APPDYNAMICS_CONTROLLER_HOST_NAME:$APPDYNAMICS_CONTROLLER_PORT $XCSRFTOKEN"
   fi
 }
 
@@ -104,8 +104,7 @@ _getValue() { echo $1 | base64 --decode | jq -r $2; }
 
 _controllerGetApplicationId() {
   _APP_NAME=${1:-"UNKNOWN"}
-  _http "GET" "http" "/controller/rest/applications?output=JSON" ""
-  #echo ["${HTTP_RESULT}"]
+  _http "GET" $HTTP_PROTOCOL "/controller/rest/applications?output=JSON" ""
   APP_ID=`echo "${HTTP_RESULT}" | jq --arg APP_NAME "$_APP_NAME" \
           -r  '.[] | select(.name == $APP_NAME) .id '`
   echo $APP_ID
@@ -118,7 +117,7 @@ _controllerGetAppNodes() {
   RESULT=""
   APP_ID=$(_controllerGetApplicationId ${APP_NAME})
   if [ "$APP_ID" != "" ]; then
-    _http "GET" "http" "/controller/rest/applications/$APP_ID/nodes?output=JSON" ""
+    _http "GET" $HTTP_PROTOCOL "/controller/rest/applications/$APP_ID/nodes?output=JSON" ""
     RESULT=`echo "${HTTP_RESULT}" | jq --arg NODE_NAME "$NODE_NAME" --arg TIER_NAME "$TIER_NAME"  \
             -r  '[.[] | select((.tierName | test($TIER_NAME)) and (.name | test($NODE_NAME)))]' `
   else
@@ -157,6 +156,14 @@ _controllerNodeMonitoring() {
   esac
 }
 
+
+if [ $APPDYNAMICS_CONTROLLER_SSL_ENABLED == "true" ]; then
+  HTTP_PROTOCOL="https"
+else
+  HTTP_PROTOCOL="http"
+fi
+
+echo "$HTTP_PROTOCOL"
 #####################################
 # Test authentication to Controller
 #
@@ -169,7 +176,7 @@ if [ $cmd == "authenticate" ]; then
 #
  elif [ $cmd == "accountInfo" ]; then
    _controllerAutheticate
-   _http "GET" "http" "/controller/restui/user/account" ""
+   _http "GET" $HTTP_PROTOCOL "/controller/restui/user/account" ""
 
    # Setup envvars
    APPDYNAMICS_CONTROLLER_HOST_NAME=$APPDYNAMICS_CONTROLLER_HOST_NAME
@@ -233,7 +240,7 @@ elif [ $cmd == "createApp" ]; then
 #
 elif [ $cmd == "getApps" ]; then
   _controllerAutheticate
-  _http "GET" "http" "/controller/rest/applications?output=JSON" ""
+  _http "GET" $HTTP_PROTOCOL "/controller/rest/applications?output=JSON" ""
 
   for row in $(echo "${HTTP_RESULT}" | jq -r '.[] | @base64'); do
      name=$(_getValue ${row} '.name')
@@ -256,6 +263,29 @@ elif [ $cmd == "getAppId" ]; then
   fi
 
 #####################################
+#
+#
+elif [ $cmd == "getSqlCalls" ]; then
+  APP_NAME=${2:-"Error Application Name Missing"}
+  HOURS=${3:-"1"}
+  TS_NOW=`date +%s`
+  NOW_MS=$((TS_NOW*1000))
+  P=$((HOURS*60*60*1000))
+  START_MS=$((NOW_MS-P))
+  D=$((NOW_MS-START_MS))
+  echo $START_MS $NOW_MS $D
+
+  _controllerAutheticate
+  APP_ID=$(_controllerGetApplicationId ${APP_NAME})
+  _http "GET" $HTTP_PROTOCOL "/controller/restui/topSummaryStats/getStats/APPLICATION/$APP_ID?applicationId=$APP_ID&time-range=Custom_Time_Range.BETWEEN_TIMES.$NOW_MS.$START_MS.0&target-entity-id=-1&target-is-component=false&exit-point-type=JDBC" ""
+  echo ${HTTP_RESULT}  | jq -r '[.[] | {detailString, totalTime, count} ]'
+
+
+  # https://ada2019082312124821.saas.appdynamics.com/controller/restui/topSummaryStats/getStats/APPLICATION/95774?applicationId=95774&time-range=Custom_Time_Range.BETWEEN_TIMES.1568859374606.1568816174606.0&target-entity-id=-1&target-is-component=false&exit-point-type=
+  # http://demo2.appdynamics.com/controller/restui/topSummaryStats/getStats/APPLICATION/41?applicationId=41&time-range=Custom_Time_Range.BETWEEN_TIMES.1568856179941.1568841779941.0&target-entity-id=-1&target-is-component=false&exit-point-type=JDBC
+
+
+#####################################
 # Get all nodes in an application
 #
 elif [ $cmd == "getNodes" ]; then
@@ -273,36 +303,55 @@ elif [ $cmd == "getNodes" ]; then
        agentType=$(_getValue ${row} '.agentType')
        machineAgentPresent=$(_getValue ${row} '.machineAgentPresent')
        tierName=$(_getValue ${row} '.tierName')
-       echo $name $id $agentType $tierName $machineAgentPresent
+       machineName=$(_getValue ${row} '.machineName')
+       echo $name $id $agentType $tierName $machineAgentPresent $machineName
     done
   else
     echo "Application not found: $APP_NAME"
   fi
 
+  #####################################
+  # Get all nodes in an application
+  #
+elif [ $cmd == "getAppNodes" ]; then
+    APP_NAME=${2:-"Error Application Name Missing"}
+    _controllerAutheticate
+    HTTP_RESULT=$(_controllerGetAppNodes $APP_NAME "." ".")
+
+    APP_ID=$(_controllerGetApplicationId ${APP_NAME})
+    if [ "$APP_ID" != "" ]; then
+      for row in $(echo "${HTTP_RESULT}" | jq -r '.[] | @base64'); do
+         name=$(_getValue ${row} '.name')
+         id=$(_getValue ${row} '.id')
+         agentType=$(_getValue ${row} '.agentType')
+         machineAgentPresent=$(_getValue ${row} '.machineAgentPresent')
+         tierName=$(_getValue ${row} '.tierName')
+         machineName=$(_getValue ${row} '.machineName')
+         echo $name $id $agentType $tierName $machineAgentPresent $machineName
+      done
+    else
+      echo "Application not found: $APP_NAME"
+    fi
+
 #####################################
-# Get all nodes in an application
+# enable / disable from a list of nodes from a file
 #
-elif [ $cmd == "test1" ]; then
-  APP_NAME=${2:-"Error Application Name Missing"}
+elif [ $cmd == "nodeMonitoringFromFile" ]; then
+  NODE_LIST_FILE=${2:-"Node List"}
+  MONITORING_STATE=${3:-"MONITORING_STATE"}
   _controllerAutheticate
-  HTTP_RESULT=$(_controllerGetAppNodes $APP_NAME "." ".")
-# cat j2 | jq  -r '. | unique_by(.machineName) | .[] | .id, .machineName '
-  APP_ID=$(_controllerGetApplicationId ${APP_NAME})
-  if [ "$APP_ID" != "" ]; then
-    echo "Application: $APP_NAME ID: $APP_ID"
-    echo "---${HTTP_RESULT}---"
-    UNIQUE_MACHINE_NODES=`echo ${HTTP_RESULT} | jq -r '[. | unique_by(.machineId) | .[] | {id, name, tierName, machineId, machineName} ] '`
-    UNIQUE_APP_NODES=`echo ${HTTP_RESULT} | jq -r '[. | unique_by(.id) | .[] | {id, name, tierName, machineId, machineName} ] '`
-    for row in $(echo "${UNODES}" | jq -r '.[] | @base64'); do
-       name=$(_getValue ${row} '.name')
-       id=$(_getValue ${row} '.id')
-       tierName=$(_getValue ${row} '.tierName')
-       machineId=$(_getValue ${row} '.machineId')
-       echo "Unique "$name $id $agentType $machineId $tierName
-    done
-  else
-    echo "Application not found: $APP_NAME"
-  fi
+  while read LINE; do
+    # 0 NODE_NAME, 1 NODE_ID, 2 AGENT_TYPE, 3 TIER, 4 MAC_AGENT, 5 MACHINE_NAME
+    ITEMS=(`echo "$LINE" | awk ' -F " " { print $1,$2,$3,$4,$5 }'` )
+    NODE_NAME=${ITEMS[0]}
+    NODE_ID=${ITEMS[1]}
+    TIER_NAME=${ITEMS[3]}
+    MACHINE_NAME=${ITEMS[4]}
+    echo "$MONITORING_STATE - $NODE_NAME, $NODE_ID, $TIER_NAME"
+    _controllerNodeMonitoring $NODE_ID "$MONITORING_STATE"
+    sleep 1
+  done < $NODE_LIST_FILE
+
 
 #####################################
 # NodeMonitoring <APP_NAME> <NODE_NAME> ENABLE_APP | DISABLE_APP | RESET_APP | ENABLE_MAC | DISABLE_MAC | RESET_MAC
@@ -316,7 +365,7 @@ elif [ $cmd == "nodeMonitoring" ]; then
   _controllerAutheticate
   HTTP_RESULT=$(_controllerGetAppNodes $APP_NAME $TIER_NAME $NODE_NAME)
   UNIQUE_MACHINE_NODES=`echo ${HTTP_RESULT} | jq -r '[. | unique_by(.machineId) | .[] | {id, name, tierName, machineId, machineName} ] '`
-  UNIQUE_APP_NODES=`echo ${HTTP_RESULT} | jq -r '[. | unique_by(.id) | .[] | {id, name, tierName, machineId, machineName} ] '`
+  UNIQUE_APP_NODES=`echo ${HTTP_RESULT}     | jq -r '[. | unique_by(.id) | .[] | {id, name, tierName, machineId, machineName} ] '`
   if [[ "$MONITORING_STATE" == *_APP ]]; then
     for row in $(echo "${UNIQUE_APP_NODES}" | jq -r '.[] | @base64'); do
        name=$(_getValue ${row} '.name')
@@ -357,7 +406,6 @@ elif [ $cmd == "enableNode" ]; then
   NODE_ID=${2:-"NONE_NONE"}
   _controllerAutheticate
   _controllerEnableNodeMonitoring $NODE_ID
-
 
 #####################################
 # addUser
