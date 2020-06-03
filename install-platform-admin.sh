@@ -28,5 +28,7 @@ echo 'platformAdmin.useHttps$Boolean=false'                                 >> $
 # Install directory
 mkdir -p $APPD_BASE_DIR
 
+PLATFORM_ADMIN_CMD="../platform-setup/platform-setup-x64-linux-$APPD_VERSION.$APPD_RELEASE_NUMBER.sh"
 # Install
-../platform-setup/platform-setup-x64-linux-$APPD_VERSION.$APPD_RELEASE_NUMBER.sh -q -varfile $RESPONSE_FILE
+chmod +x $PLATFORM_ADMIN_CMD
+$PLATFORM_ADMIN_CMD -q -varfile $RESPONSE_FILE

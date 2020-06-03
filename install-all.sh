@@ -8,7 +8,8 @@
 
 ./econsole-cmds.sh addCredentials
 
-./econsole-cmds.sh addRemoteHost $APPD_CONTROLLER_HOST1
+./econsole-cmds.sh addLocalHost $APPD_CONTROLLER_HOST1
+#./econsole-cmds.sh addRemoteHost $APPD_CONTROLLER_HOST1
 #./econsole-cmds.sh addRemoteHost $APPD_CONTROLLER_HOST2
 
 ./econsole-cmds.sh addRemoteHost $APPD_EVENTS_SERVICE_HOST1
